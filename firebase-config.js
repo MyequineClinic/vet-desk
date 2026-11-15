@@ -1,0 +1,1 @@
+window.FIREBASE_CONFIG = {apiKey: "AIzaSyAROBlJ1D9FAr7Q79dAJvQNUIsloyO1NhA", authDomain: "my-equine-clinic-50a11.firebaseapp.com", projectId: "my-equine-clinic-50a11", storageBucket: "my-equine-clinic-50a11.firebasestorage.app", messagingSenderId: "813364466934", appId: "1:813364466934:web:45c181dd5591e3191248d7"};
