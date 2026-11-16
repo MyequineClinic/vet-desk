@@ -184,6 +184,7 @@ tr.bad td{background:var(--badbg)}
     <a href="#meds" data-v="meds">Medicines &amp; doses</a>
     <a href="#finder" data-v="finder">Find &amp; edit</a>
     <a href="#diseases" data-v="diseases">Diseases</a>
+    <a href="horse-file.html">Horse File / الملف الشامل</a>
     <a href="#settings" data-v="settings">Settings &amp; lists</a>
   </nav>
 </header>
@@ -196,7 +197,7 @@ tr.bad td{background:var(--badbg)}
 "use strict";
 const SEED = JSON.parse(document.getElementById("seed").textContent);
 let db = null, dl = null, writeBlocked = false;
-const S = {meds:[], doses:[], stock:[], visits:[], drafts:[], dchunks:[], medimg:[], preventive:[], notes:[], lists:null, settings:null, loaded:{}, live:false};
+const S = {meds:[], doses:[], stock:[], visits:[], drafts:[], dchunks:[], medimg:[], preventive:[], notes:[], horses:[], lists:null, settings:null, loaded:{}, live:false};
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const N = v => (v === "" || v === null || v === undefined || isNaN(+v)) ? null : +v;
@@ -597,12 +598,16 @@ function drawPrev(){
   const box = $("#prevBox"); if (!box) return;
   const pv = prevVisits();
   if (!RX.pid && !RX.name) { box.innerHTML = `<p class="small muted">Type the ID or name – previous visits appear here.</p>`; return; }
-  if (!pv.length) { box.innerHTML = `<p class="small muted">${RX.status==="Old" ? "No saved visit found for this ID / name." : "New patient – no previous visits."}</p>`; return; }
+  const hw = hfWeight(RX);
+  if (hw && !RX.bwt) { RX.bwt = hw.kg; const bi = $("#f_bwt"); if (bi) bi.value = hw.kg; saveDraft(); setTimeout(() => { if (typeof refreshRxCalc === "function") refreshRxCalc(); }, 0); }
+  const hwNote = hw ? `<p class="small" style="margin:0 0 6px">🐴 Horse File weight: <b>${esc(hw.kg)} kg</b>${hw.date ? " · " + esc(dshow(hw.date)) : ""}${hw.method ? " · " + esc(hw.method) : ""}${String(RX.bwt) !== hw.kg ? ` <button id="btnHfW" class="small">Use this weight</button>` : ""} · <a href="${esc(hfLink(RX.pid, RX.name))}">Open Horse File</a></p>` : "";
+  if (!pv.length) { box.innerHTML = hwNote + `<p class="small muted">${RX.status==="Old" ? "No saved visit found for this ID / name." : "New patient – no previous visits."}</p>`; const ub = $("#btnHfW"); if (ub) ub.onclick = () => { RX.bwt = hw.kg; saveDraft(); render(true); }; return; }
   const last = pv[0];
   const due = [...latestPrev().values()].filter(r => r.next && daysUntil(r.next) <= remindDays() && sameHorse(r, last));
-  box.innerHTML = (due.length ? `<p class="small red" style="margin:0 0 6px">Due: ${due.map(r => `${r.kind === "vacc" ? "💉" : "🪱"} ${esc(r.drug)} – ${esc(dshow(r.next))}`).join(" · ")}</p>` : "") + `<div class="row"><b>Previous visits: ${pv.length}</b><span class="spacer"></span><button id="btnRec" class="small">📋 Full patient record</button><button id="btnFill" class="small">Fill sex / breed / birth date from last visit</button></div>
+  box.innerHTML = hwNote + (due.length ? `<p class="small red" style="margin:0 0 6px">Due: ${due.map(r => `${r.kind === "vacc" ? "💉" : "🪱"} ${esc(r.drug)} – ${esc(dshow(r.next))}`).join(" · ")}</p>` : "") + `<div class="row"><b>Previous visits: ${pv.length}</b><span class="spacer"></span><button id="btnRec" class="small">📋 Full patient record</button><button id="btnFill" class="small">Fill sex / breed / birth date from last visit</button></div>
   ${pv.slice(0,6).map(v => visitCard(v,true)).join("")}${pv.length>6?`<p class="small"><a href="#history">See all in History</a></p>`:""}`;
   $("#btnFill").onclick = () => { ["sex","breed","birth"].forEach(k => { if (last[k]) RX[k] = last[k]; }); if (last.bwt && !RX.bwt) RX.bwt = last.bwt; saveDraft(); render(true); };
+  { const ub = $("#btnHfW"); if (ub) ub.onclick = () => { RX.bwt = hw.kg; saveDraft(); render(true); }; }
   box.querySelectorAll("[data-open]").forEach(b => b.onclick = () => openVisit(b.dataset.open));
   bindPat(box); $("#btnRec").onclick = () => openPatient(last.pid, last.name);
 }
@@ -1228,9 +1233,9 @@ function renderPatient(main){
   if (!PAT) { main.innerHTML = `<div class="panel"><h2>Patient record</h2><p>Open <a href="#history">History &amp; search</a> and click a horse's name.</p></div>`; return; }
   const vs = patientVisits(), last = vs[0] || {};
   const title = last.name || PAT.name || PAT.pid || "Patient";
-  const info = [["Sex",last.sex],["Breed",last.breed],["Birth date / age",last.birth ? dshow(last.birth) + " · " + ageText(last.birth) : ""],["Type",last.type],["Last body weight",last.bwt ? last.bwt + " kg" : ""],["Visits",String(vs.length)]].filter(r => r[1]);
+  const info = [["Sex",last.sex],["Breed",last.breed],["Birth date / age",last.birth ? dshow(last.birth) + " · " + ageText(last.birth) : ""],["Type",last.type],["Last body weight",last.bwt ? last.bwt + " kg" : ""],["Horse File weight",(() => { const hw = hfWeight({pid:last.pid||PAT.pid, name:last.name||PAT.name}); return hw ? hw.kg + " kg" + (hw.date ? " · " + dshow(hw.date) : "") : ""; })()],["Visits",String(vs.length)]].filter(r => r[1]);
   main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Patient record – ${esc(title)}</h2>${(last.pid||PAT.pid) ? `<span class="pill p-n">ID ${esc(last.pid||PAT.pid)}</span>` : ""}<span class="spacer"></span>
-      <button id="pBack">← History</button><button id="pNew">+ New prescription</button><button id="pPrint">🖨 Print record</button><button class="pri" id="pPdf">⬇ Save as PDF</button></div>
+      <button id="pBack">← History</button><button id="pNew">+ New prescription</button><button type="button" id="pHf" data-href="${esc(hfLink(last.pid||PAT.pid, last.name||PAT.name))}">🐴 Horse File</button><button id="pPrint">🖨 Print record</button><button class="pri" id="pPdf">⬇ Save as PDF</button></div>
       <div class="kv">${info.map(r => `<div>${esc(r[0])}</div><div>${esc(r[1])}</div>`).join("")}</div>
       <p class="small muted">All visits for this horse, newest first. <b>Print record / Save as PDF</b> gives the full record (notes, investigations, photos, vaccination and deworming); each visit also has its own <b>Print / PDF this visit</b>.</p></div>
     <div class="panel" id="pPrev"></div>
@@ -1241,8 +1246,9 @@ function renderPatient(main){
       <h3>Photos &amp; videos</h3><div class="photos" id="pm_${esc(v._id)}"><p class="small muted">Loading…</p></div>
       <div style="margin-top:8px">${mediaPicker("pv_" + v._id)}</div></div>`).join("") || `<div class="panel"><p class="muted">No visits found for this horse.</p></div>`}`;
   $("#pBack").onclick = () => { location.hash = "#history"; };
+  { const hb = $("#pHf"); if (hb) hb.onclick = () => { location.href = hb.dataset.href; }; }
   $("#pNew").onclick = () => { const go = () => { Object.keys(RX).forEach(k => delete RX[k]);
-      Object.assign(RX, newRx(), {status:"Old", pid:last.pid||PAT.pid, name:last.name||PAT.name, sex:last.sex||"", breed:last.breed||"", birth:last.birth||"", type:last.type||"Adult", bwt:last.bwt||""});
+      Object.assign(RX, newRx(), {status:"Old", pid:last.pid||PAT.pid, name:last.name||PAT.name, sex:last.sex||"", breed:last.breed||"", birth:last.birth||"", type:last.type||"Adult", bwt:(() => { const hw = hfWeight({pid:last.pid||PAT.pid, name:last.name||PAT.name}); return hw && (!last.bwt || (hw.date||"") >= (last.date||"")) ? hw.kg : (last.bwt||""); })()});
       PEND = []; saveDraft(); location.hash = "#rx"; };
     if (RX.name || RX.complaint || RX.lines.some(l => l.med)) confirmBox("Start a new prescription for this horse? The current form will be replaced.", go); else go(); };
   const getMedia = async () => { const miss = vs.filter(v => !PMEDIA[v._id]).map(v => v._id); if (miss.length) Object.assign(PMEDIA, await loadMedia(miss)); return PMEDIA; };
@@ -1420,6 +1426,10 @@ function drawNotif(){
 const hk = s => String(s || "").trim().toLowerCase();
 function sameHorse(a, b){ if (!a || !b) return false; if (hk(a.pid) && hk(b.pid)) return hk(a.pid) === hk(b.pid); return !!hk(a.name) && hk(a.name) === hk(b.name); }
 const slug = s => String(s || "horse").replace(/[^\w-]+/g, "_");
+// Horse File page (horse-file.html) keeps one record per horse in "horses" – body weight is shared with prescriptions
+const horseRec = p => (S.horses || []).find(h => sameHorse(h, p)) || null;
+const hfWeight = p => { const h = horseRec(p); return h && N(h.weightKg) !== null ? {kg: String(h.weightKg), date: h.weightDate || "", method: h.weightMethod || ""} : null; };
+const hfLink = (pid, name) => `horse-file.html?${new URLSearchParams(Object.assign({}, pid ? {pid} : {}, name ? {name} : {})).toString()}`;
 const vaccMonths = () => N(ST().vaccMonths) ?? 12;
 const dewormMonths = () => N(ST().dewormMonths) ?? 3;
 const linkedPrev = v => (v && v._id) ? S.preventive.filter(p => p.visitId === v._id).sort((a,b) => (a.kind||"").localeCompare(b.kind||"")) : [];
@@ -2233,7 +2243,7 @@ function makeLocalDB(){
 function loadScript(src){ return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("load " + src)); document.head.appendChild(s); }); }
 bindGlobalSearch();
 function startData(){
-  ["meds","doses","stock","visits","drafts","medimg","preventive","notes"].forEach(k => sub(k, k));
+  ["meds","doses","stock","visits","drafts","medimg","preventive","notes","horses"].forEach(k => sub(k, k));
   sub("dchunks","dchunks"); subDoc("config/lists","lists"); subDoc("config/settings","settings");
 }
 function loginPanel(msg){
