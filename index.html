@@ -1382,8 +1382,9 @@ function renderPrevList(main){
       $("#pvbody").innerHTML = shown.map(({h, r, n}, i) => { const st = r ? prevStatus(r, latest) : ["No record","p-n"];
         return `<tr class="${st[1]==="p-bad"?"bad":""}"><td>${esc(h.listNo)}</td><td><button class="linkbtn" data-pat="1" data-pid="${esc(h.pid)}" data-pname="${esc(h.name)}"><b>${esc(h.nameEn || h.name)}</b></button>${h.nameEn && h.nameEn !== h.name ? ` <span class="ar">${esc(h.name)}</span>` : ""}</td><td>${esc(h.pid)}</td><td class="small">${esc(h.cat)}</td>
           <td>${r ? `<b>${esc(r.drug||"")}</b>` : '<span class="muted">–</span>'}</td><td>${esc(r && r.given ? dshow(r.given) : "")}</td><td>${esc(r && r.next ? dshow(r.next) : "")}</td><td><span class="pill ${st[1]}">${esc(st[0])}</span></td><td class="num">${n||""}</td>
-          <td style="white-space:nowrap"><button class="small" data-hadd="${i}">+ Add</button>${r ? ` <button class="small" data-pr="${esc(r._id)}" title="Record the next dose">↻ Repeat</button>` : ""}</td></tr>`; }).join("") || `<tr><td colspan="10" class="muted">No horses – add them in the Horses tab.</td></tr>`;
+          <td style="white-space:nowrap">${h.rec ? "" : `<button class="small pri" data-hl="${i}" title="This name is not in the Horses list">＋ Add to list</button> `}<button class="small" data-hadd="${i}">+ Add</button>${r ? ` <button class="small" data-pr="${esc(r._id)}" title="Record the next dose">↻ Repeat</button>` : ""}</td></tr>`; }).join("") || `<tr><td colspan="10" class="muted">No horses – add them in the Horses tab.</td></tr>`;
       $("#pvbody").querySelectorAll("[data-hadd]").forEach(b => b.onclick = () => { const h = shown[+b.dataset.hadd].h; editPrev(kind, null, {name:h.name, pid:h.pid, given:today()}); });
+      $("#pvbody").querySelectorAll("[data-hl]").forEach(b => b.onclick = () => addToHorseList(shown[+b.dataset.hl].h));
     } else {
       shown = S.preventive.filter(r => r.kind === kind && (!q || [r.name, r.pid, r.drug, r.note, ...(horseRec(r) ? [horseRec(r).name, horseRec(r).nameEn] : [])].some(x => String(x||"").toLowerCase().includes(q))) &&
         (prevF === "all" || (prevF === "latest" && latestIds.has(r._id)) || (prevF === "due" && latestIds.has(r._id) && r.next && daysUntil(r.next) <= remindDays())))
@@ -1428,10 +1429,11 @@ function renderPrevBoth(main, tabs){
       .map(h => ({h, v:prevOf(h, "vacc")[0] || null, d:prevOf(h, "deworm")[0] || null}));
     $("#pvcount").textContent = `${shown.length} horse(s) · ${shown.filter(x => !x.v).length} without vaccination · ${shown.filter(x => !x.d).length} without deworming`;
     $("#pvbody").innerHTML = shown.map(({h, v, d}, i) => `<tr><td>${esc(h.listNo)}</td><td><button class="linkbtn" data-pat="1" data-pid="${esc(h.pid)}" data-pname="${esc(h.name)}"><b>${esc(h.nameEn || h.name)}</b></button>${h.nameEn && h.nameEn !== h.name ? ` <span class="ar">${esc(h.name)}</span>` : ""}</td><td>${esc(h.pid)}</td>
-      ${cell(v, latest)}${cell(d, latest)}<td style="white-space:nowrap"><button class="small" data-av="${i}">+ 💉</button> <button class="small" data-ad="${i}">+ 🪱</button></td></tr>`).join("") || `<tr><td colspan="12" class="muted">No horses – add them in the Horses tab.</td></tr>`;
+      ${cell(v, latest)}${cell(d, latest)}<td style="white-space:nowrap">${h.rec ? "" : `<button class="small pri" data-hl="${i}" title="This name is not in the Horses list">＋ Add to list</button> `}<button class="small" data-av="${i}">+ 💉</button> <button class="small" data-ad="${i}">+ 🪱</button></td></tr>`).join("") || `<tr><td colspan="12" class="muted">No horses – add them in the Horses tab.</td></tr>`;
     bindPat($("#pvbody"));
     $("#pvbody").querySelectorAll("[data-av]").forEach(b => b.onclick = () => { const h = shown[+b.dataset.av].h; editPrev("vacc", null, {name:h.name, pid:h.pid, given:today()}); });
     $("#pvbody").querySelectorAll("[data-ad]").forEach(b => b.onclick = () => { const h = shown[+b.dataset.ad].h; editPrev("deworm", null, {name:h.name, pid:h.pid, given:today()}); });
+    $("#pvbody").querySelectorAll("[data-hl]").forEach(b => b.onclick = () => addToHorseList(shown[+b.dataset.hl].h));
   };
   main.querySelectorAll("[data-pk]").forEach(b => b.onclick = () => { histMode = b.dataset.pk; render(true); });
   $("#pvq").addEventListener("input", e => { prevQ = e.target.value; draw(); });
@@ -1440,6 +1442,16 @@ function renderPrevBoth(main, tabs){
   $("#pvXlsx").onclick = () => saveFile(`vaccination_deworming_${today()}.xlsx`, makeXlsx([{name:"All horses", rows:[["No.","Horse","Name (English)","ID","Category","Last vaccination","Given","Next","Status","Last deworming","Given","Next","Status"],
     ...shown.map(({h, v, d}) => [h.listNo, h.name, h.nameEn, h.pid, h.cat, v ? v.drug||"" : "", v ? v.given||"" : "", v ? v.next||"" : "", v ? prevStatus(v)[0] : "No record", d ? d.drug||"" : "", d ? d.given||"" : "", d ? d.next||"" : "", d ? prevStatus(d)[0] : "No record"])]}]));
   draw();
+}
+
+// a name used in vaccination / deworming records but missing from the Horses list → the same full horse form as the Horses tab
+function addToHorseList(h){
+  const used = new Set((S.horses || []).map(x => String(x.listNo || "")).filter(Boolean));
+  const pidIsNo = /^\d{1,4}$/.test(String(h.pid || "")) && !used.has(String(h.pid));
+  const ar = /[؀-ۿ]/.test(h.name);
+  editHorse(null, {name:ar ? h.name : "", nameEn:ar ? "" : h.name, pid:pidIsNo ? "" : h.pid, listNo:pidIsNo ? String(h.pid) : "",
+    _note:pidIsNo ? `The <b>${esc(h.pid)}</b> saved as Patient ID looks like the serial No., so it is put in <b>No.</b> and removed from this horse's vaccination / deworming records.` : "Fill in the details like your other horses – it then shows everywhere (Horses, prescriptions, Horse File, vaccination & deworming).",
+    _after:async () => { if (pidIsNo) for (const r of S.preventive.filter(r => hk(r.name) === hk(h.name) && hk(r.pid) === hk(h.pid))) await W(() => db.doc("preventive/" + r._id).update({pid:""})); }});
 }
 // one vaccination / deworming for many horses at once (same drug and date)
 function editPrevBulk(kind){
@@ -1484,6 +1496,7 @@ function editPrevBulk(kind){
   bg.querySelectorAll("[data-plus]").forEach(b => b.onclick = () => { q("#pb_next").value = addMonths(q("#pb_given").value || today(), +b.dataset.plus); });
   cnt();
 }
+let NEW_HORSE = null;
 function editPrev(kind, r, preset){
   const isNew = !r; r = r || Object.assign({given:today(), next:"", drug:"", note:"", pid:"", name:""}, preset || {});
   const PH = prevHorses(), findPH = t => { t = String(t || "").trim(); if (!t) return null; return PH.find(h => hk(pLabel(h)) === hk(t)) || PH.find(h => [h.name, h.nameEn, ...h.aliases].some(x => hk(x) === hk(t))) || null; };
@@ -1493,11 +1506,11 @@ function editPrev(kind, r, preset){
   const re = kind === "vacc" ? /vacc|tetan|influenza|rabies|strangles|herpes|ehv|wnv|encephal/i : /anthelm|dewor|worm|ivermect|fenbend|pyrantel|praziq|moxidect|abamect|oxibend|eqvalan/i;
   const drugs = [...new Set([...S.preventive.filter(p => p.kind === kind).map(p => p.drug), ...S.meds.filter(m => re.test([m.type, m.name, m.function, m.indication].join(" "))).map(m => m.name)].filter(Boolean))].sort();
   modal(`<h2>${isNew ? "Add" : "Edit"} ${KLAB[kind].toLowerCase()}</h2>
-    <div class="grid g2">
-      <label for="pr_name" style="grid-column:1/-1">Horse name (English – Arabic)<input id="pr_name" list="pr_names" value="${esc(ph0 ? pLabel(ph0) : (r.name||""))}" autocomplete="off" placeholder="Pick from the list or type a new horse"></label>
-      <label for="pr_no">No. (horse list number)<input id="pr_no" value="${esc(ph0 ? ph0.listNo : "")}" placeholder="e.g. ${nextNo()}"></label>
-      <label for="pr_pid">Patient ID<input id="pr_pid" value="${esc(r.pid||"")}"></label>
-      <p class="small muted" id="pr_hint" style="grid-column:1/-1;margin:0">${ph0 ? "" : "A horse not in the list is added to the Horses list with this No. when you save."}</p>
+    <div class="grid g4">
+      <label for="pr_no">No. (serial)<input id="pr_no" value="${esc(ph0 ? ph0.listNo : "")}" placeholder="${nextNo()}" style="font-weight:700"></label>
+      <label for="pr_name" style="grid-column:span 3">Horse name (English – Arabic)<input id="pr_name" list="pr_names" value="${esc(ph0 ? pLabel(ph0) : (r.name||""))}" autocomplete="off" placeholder="Pick from the list or type a new horse"></label>
+      <label for="pr_pid" style="grid-column:span 2">Patient ID <span class="small muted">(optional – not the serial No.)</span><input id="pr_pid" value="${esc(r.pid||"")}"></label>
+      <p class="small muted" id="pr_hint" style="grid-column:span 2;margin:0;align-self:end">${ph0 ? "" : "A horse not in the list is added to the Horses list with this No. when you save."}</p>
       <label for="pr_drug" style="grid-column:1/-1">Name of drug${kind === "vacc" ? " / vaccine" : ""}<input id="pr_drug" list="pr_drugs" value="${esc(r.drug||"")}" autocomplete="off"></label>
       <label for="pr_given">Given date<input id="pr_given" type="date" value="${esc(r.given||"")}"></label>
       <label for="pr_next">Next date<input id="pr_next" type="date" value="${esc(r.next||"")}"></label>
@@ -1515,7 +1528,7 @@ function editPrev(kind, r, preset){
     if (no && (S.horses || []).some(h => String(h.listNo) === no && (!ph || !ph.rec || h._id !== ph.rec._id))) { toast(`No. ${no} is already used by another horse.`); return; }
     if (!ph && typed) { // new horse → add to the Horses list with its number
       const ar = /[؀-ۿ]/.test(typed), key = hDocId(d.pid || typed), id = S.horses.some(h => h._id === key) ? key + "_" + Date.now().toString(36) : key;
-      await W(() => db.doc("horses/" + id).set({name:ar ? typed : "", nameEn:ar ? "" : typed, listNo:no, pid:d.pid, updatedAt:new Date().toISOString()})); toast(`${typed} added to the Horses list${no ? " as No. " + no : ""}.`);
+      await W(() => db.doc("horses/" + id).set({name:ar ? typed : "", nameEn:ar ? "" : typed, listNo:no, pid:d.pid, updatedAt:new Date().toISOString()})); NEW_HORSE = id;
     } else if (ph && ph.rec && no && String(ph.rec.listNo || "") !== no) { const k = {}; Object.entries(ph.rec).forEach(([a, v]) => { if (a !== "_id") k[a] = v; }); k.listNo = no; await W(() => db.doc("horses/" + ph.rec._id).set(k)); }
     if (!d.drug) { toast("Type the name of the drug."); return; }
     if (d.next && d.given && d.next < d.given) { toast("The next date is before the given date."); return; }
@@ -1526,6 +1539,8 @@ function editPrev(kind, r, preset){
       if (moved) { await unlinkPrev(r); if (d.given) await linkPrev(r._id, d); else await W(() => db.doc("preventive/" + r._id).update({visitId:null})); }
     }
     close(); toast("Saved – linked to History and the patient record.");
+    if (NEW_HORSE) { const nid = NEW_HORSE; NEW_HORSE = null; setTimeout(() => { const nh = S.horses.find(x => x._id === nid);
+      confirmBox(`${typed} was added to the Horses list${no ? " as No. " + no : ""}. Add its other details now (Arabic / English name, type, birth year, source, category…) so it follows the same pattern as your other horses?`, () => editHorse(nid)); }, 300); }
   });
   const bg = [...document.querySelectorAll(".modal-bg")].pop();
   bg.querySelectorAll("[data-plus]").forEach(b => b.onclick = () => { bg.querySelector("#pr_next").value = addMonths(bg.querySelector("#pr_given").value || today(), +b.dataset.plus); });
@@ -2343,9 +2358,10 @@ let HORSES_SHOWN = [];
 const HF = [["listNo","No.","text"],["pid","Patient ID","text"],["name","Name (Arabic) / اسم الخيل","text"],["nameEn","Name (English)","text"],["sex","Type / Sex – نوع الخيل","dl:dl_htypes"],["breed","Breed","dl:dl_hbreeds"],
   ["birth","Birth date (if known)","date"],["birthYear","Birth year","number"],["weightKg","Body weight (kg)","number"],["weightDate","Weight date","date"],["color","Color","text"],["rider","Rider","text"],
   ["microchip","Microchip No.","text"],["militaryNo","Military No.","text"],["source","Source","dl:dl_hsrc"],["category","Category / purpose","dl:dl_hcat"],["listNotes","Notes","text"],["aliases","Other spellings / aliases (comma between)","text"]];
-function editHorse(id){
-  const h = id ? S.horses.find(x => x._id === id) : {};
-  modal(`<h2>${id ? "Edit horse – " + esc([h.name, h.nameEn].filter(Boolean).join(" / ")) : "Add horse"}</h2><div class="grid g4">
+function editHorse(id, prefill){
+  const h = id ? S.horses.find(x => x._id === id) : Object.assign({}, prefill || {});
+  if (!id && !h.listNo) h.listNo = String(Math.max(0, ...(S.horses || []).map(x => parseFloat(x.listNo) || 0)) + 1); // next serial No.
+  modal(`<h2>${id ? "Edit horse – " + esc([h.name, h.nameEn].filter(Boolean).join(" / ")) : "Add horse" + (h.name || h.nameEn ? " – " + esc(h.name || h.nameEn) : "")}</h2>${h._note ? `<p class="small" style="margin:0 0 8px">${h._note}</p>` : ""}<div class="grid g4">
     ${HF.map(([k,l,t]) => { const dl = t.startsWith("dl:") ? t.slice(3) : ""; return `<label${k==="listNotes"||k==="category"?' style="grid-column:span 2"':""}>${esc(l)}<input id="eh_${k}" type="${dl ? "text" : t}"${dl ? ` list="${dl}"` : ""}${t==="number"?' step="any"':""} value="${esc(Array.isArray(h[k]) ? h[k].join(", ") : (h[k] ?? ""))}"></label>`; }).join("")}
     ${HCOLS().map(c => `<label>${esc(c.label)}${hcolInput(c, "ehc_" + c.key, h[c.key])}</label>`).join("")}</div>
     <datalist id="dl_htypes">${HTYPES.map(x => `<option>${esc(x)}</option>`).join("")}</datalist><datalist id="dl_hsrc">${HSRC.map(x => `<option>${esc(x)}</option>`).join("")}</datalist>
@@ -2360,10 +2376,11 @@ function editHorse(id){
     if (!d.name && !d.nameEn && !d.pid) { toast("Enter a name or Patient ID."); return; }
     if (d.birth && !d.birthYear) d.birthYear = d.birth.slice(0,4);
     if (d.weightKg) { d.weightKg = Number(d.weightKg); if (!d.weightDate) d.weightDate = today(); if (!h.weightMethod || String(h.weightKg) !== String(d.weightKg)) d.weightMethod = "horse list"; } else delete d.weightKg;
+    if (d.listNo && S.horses.some(x => x._id !== id && String(x.listNo) === d.listNo)) { toast(`No. ${d.listNo} is already used by another horse.`); return; }
     const dup = S.horses.find(x => x._id !== id && ((d.pid && hk(x.pid) === hk(d.pid)) || (d.name && hk(x.name) === hk(d.name)) || (d.nameEn && hk(x.nameEn) === hk(d.nameEn))));
     const go = async () => { let key = id || hDocId(d.pid || d.name || d.nameEn); if (!id && S.horses.some(x => x._id === key)) key += "_" + Date.now().toString(36);
-      const old = {}; Object.entries(h).forEach(([k,v]) => { if (k !== "_id") old[k] = v; });
-      await W(() => db.doc("horses/" + key).set({...old, ...d, updatedAt:new Date().toISOString()})); close(); toast(id ? "Horse updated." : "Horse added."); };
+      const old = {}; Object.entries(h).forEach(([k,v]) => { if (!k.startsWith("_")) old[k] = v; });
+      await W(() => db.doc("horses/" + key).set({...old, ...d, updatedAt:new Date().toISOString()})); if (typeof h._after === "function") await h._after(key); close(); toast(id ? "Horse updated." : "Horse added."); };
     if (dup) confirmBox(`${dup.name || dup.nameEn} already has this ${d.pid && hk(dup.pid) === hk(d.pid) ? "Patient ID" : "name"}. Save anyway?`, go); else go();
   });
 }
@@ -2710,7 +2727,7 @@ async function bindHfLists(){
 function renderSettings(main){
   const st = ST(), l = L();
   const ta = (k, lab) => `<label>${lab} (one per line)<textarea id="ls_${k}" rows="6">${esc((l[k]||[]).join("\n"))}</textarea></label>`;
-  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v12 · 16 Nov 2026</span></div><div class="grid g4">
+  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v14 · 16 Nov 2026</span></div><div class="grid g4">
     <label>Clinic / unit name<input id="st_clinic" value="${esc(st.clinic)}"></label><label>Veterinarian (printed)<input id="st_vet" value="${esc(st.vet)}"></label>
     <label>Max IM volume per site (ml)<input id="st_imMax" type="number" value="${esc(st.imMax)}"></label><label>Expiry warning (days)<input id="st_expiryDays" type="number" value="${esc(st.expiryDays)}"></label><label>Vaccination / deworming reminder (days before)<input id="st_remindDays" type="number" value="${esc(st.remindDays ?? 14)}"></label>
     <label>Next vaccination after (months)<input id="st_vaccMonths" type="number" min="0" value="${esc(st.vaccMonths ?? 12)}"></label><label>Next deworming after (months)<input id="st_dewormMonths" type="number" min="0" value="${esc(st.dewormMonths ?? 3)}"></label></div>
