@@ -1330,7 +1330,7 @@ function editNote(id){
 
 /* ---------------- vaccination & deworming ---------------- */
 const KLAB = {vacc:"Vaccination", deworm:"Deworming"};
-let histMode = "vacc", prevQ = "", prevF = "horses", notifOpen = "", notifHidden = false;
+let histMode = "both", prevQ = "", prevF = "horses", notifOpen = "", notifHidden = false;
 const remindDays = () => { const n = N(ST().remindDays); return n === null ? 14 : n; };
 const daysUntil = d => Math.round((new Date(d + "T00:00:00") - new Date(today() + "T00:00:00")) / 864e5);
 function addMonths(d, n){ const x = new Date((d || today()) + "T00:00:00"); if (isNaN(x)) return ""; const day = x.getDate(); x.setMonth(x.getMonth() + n); if (x.getDate() < day) x.setDate(0); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`; }
@@ -1353,15 +1353,18 @@ function histSel(){ return `<select id="hmode" aria-label="Record type" style="w
 function bindHistSel(){ const h = $("#hmode"); if (h) h.onchange = e => { histMode = e.target.value; render(true); }; }
 // all horses: horse list + any horse that only appears in vaccination / deworming records
 function prevHorses(){
-  const out = (S.horses || []).map(h => ({pid:h.pid||"", name:h.name||h.nameEn||"", nameEn:h.nameEn||"", listNo:h.listNo||"", cat:h.category||"", rec:h}));
+  const out = (S.horses || []).map(h => ({pid:h.pid||"", name:h.name||h.nameEn||"", nameEn:h.nameEn||"", listNo:h.listNo||"", cat:h.category||"", rec:h, aliases:h.aliases||[]}));
   S.preventive.forEach(r => { if (!out.some(h => ofHorse({pid:h.pid, name:h.name}, r) || (h.nameEn && hk(h.nameEn) === hk(r.name)))) { if (!out.some(h => !h.rec && hk(h.name) === hk(r.name || r.pid))) out.push({pid:r.pid||"", name:r.name||r.pid||"", nameEn:"", listNo:"", cat:"", rec:null}); } });
   return out.sort((a,b) => ((parseFloat(a.listNo) || 1e9) - (parseFloat(b.listNo) || 1e9)) || String(a.name).localeCompare(String(b.name)));
 }
+const pLabel = h => h.nameEn && h.nameEn !== h.name ? `${h.nameEn} – ${h.name}` : (h.name || h.nameEn || "");
 const prevOf = (h, kind) => S.preventive.filter(r => r.kind === kind && (ofHorse({pid:h.pid, name:h.name}, r) || (h.nameEn && hk(h.nameEn) === hk(r.name)))).sort((a,b) => (b.given||"").localeCompare(a.given||"") || (b.at||"").localeCompare(a.at||""));
 function renderPrevList(main){
+  const tabBtn = (k, t) => `<button class="${k===histMode?"pri":""}" data-pk="${k}" style="font-size:16px;padding:10px 18px">${t}${k !== "both" ? ` <span class="pill ${dueList(k).length?"p-warn":"p-n"}">${dueList(k).length} due</span>` : ""}</button>`;
+  const tabs = `<div class="row" style="margin-bottom:10px"><h2 style="margin:0">Vaccination &amp; deworming</h2><span class="spacer"></span>${tabBtn("both","📋 Both – all horses")}${tabBtn("vacc","💉 Vaccination")}${tabBtn("deworm","🪱 Deworming")}</div>`;
+  if (histMode === "both") return renderPrevBoth(main, tabs);
   const kind = histMode === "deworm" ? "deworm" : "vacc";
-  const tabBtn = (k, t) => `<button class="${k===kind?"pri":""}" data-pk="${k}" style="font-size:16px;padding:10px 18px">${t} <span class="pill ${dueList(k).length?"p-warn":"p-n"}">${dueList(k).length} due</span></button>`;
-  main.innerHTML = `<div class="panel"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">Vaccination &amp; deworming</h2><span class="spacer"></span>${tabBtn("vacc","💉 Vaccination")}${tabBtn("deworm","🪱 Deworming")}</div>
+  main.innerHTML = `<div class="panel">${tabs}
     <div class="row" style="margin-bottom:8px"><input id="pvq" placeholder="Search horse (Arabic / English), ID, drug or note…" value="${esc(prevQ)}" style="max-width:380px">
       <select id="pvf" style="max-width:280px">${[["horses",`All horses (${prevHorses().length}) – last ${KLAB[kind].toLowerCase()}`],["all","All records"],["due","Due & overdue"],["latest","Latest per horse & drug"]].map(([v,t]) => `<option value="${v}"${v===prevF?" selected":""}>${esc(t)}</option>`).join("")}</select>
       <span class="spacer"></span><button id="pvXlsx">⬇ Excel</button><button id="pvCsv">⬇ CSV</button><button id="pvBulk">+ Add for many horses</button><button class="pri" id="pvAdd">+ Add ${KLAB[kind].toLowerCase()}</button></div>
@@ -1377,7 +1380,7 @@ function renderPrevList(main){
       $("#pvhead").innerHTML = `<tr><th>No.</th><th>Horse</th><th>ID</th><th>Category</th><th>Last ${KLAB[kind].toLowerCase()}</th><th>Given date</th><th>Next date</th><th>Status</th><th class="num">Records</th><th></th></tr>`;
       $("#pvcount").textContent = `${shown.length} horse(s) · ${shown.filter(x => !x.r).length} with no ${KLAB[kind].toLowerCase()} recorded`;
       $("#pvbody").innerHTML = shown.map(({h, r, n}, i) => { const st = r ? prevStatus(r, latest) : ["No record","p-n"];
-        return `<tr class="${st[1]==="p-bad"?"bad":""}"><td>${esc(h.listNo)}</td><td><button class="linkbtn" data-pat="1" data-pid="${esc(h.pid)}" data-pname="${esc(h.name)}"><b class="ar">${esc(h.name)}</b></button>${h.nameEn && h.nameEn !== h.name ? `<div class="small muted">${esc(h.nameEn)}</div>` : ""}</td><td>${esc(h.pid)}</td><td class="small">${esc(h.cat)}</td>
+        return `<tr class="${st[1]==="p-bad"?"bad":""}"><td>${esc(h.listNo)}</td><td><button class="linkbtn" data-pat="1" data-pid="${esc(h.pid)}" data-pname="${esc(h.name)}"><b>${esc(h.nameEn || h.name)}</b></button>${h.nameEn && h.nameEn !== h.name ? ` <span class="ar">${esc(h.name)}</span>` : ""}</td><td>${esc(h.pid)}</td><td class="small">${esc(h.cat)}</td>
           <td>${r ? `<b>${esc(r.drug||"")}</b>` : '<span class="muted">–</span>'}</td><td>${esc(r && r.given ? dshow(r.given) : "")}</td><td>${esc(r && r.next ? dshow(r.next) : "")}</td><td><span class="pill ${st[1]}">${esc(st[0])}</span></td><td class="num">${n||""}</td>
           <td style="white-space:nowrap"><button class="small" data-hadd="${i}">+ Add</button>${r ? ` <button class="small" data-pr="${esc(r._id)}" title="Record the next dose">↻ Repeat</button>` : ""}</td></tr>`; }).join("") || `<tr><td colspan="10" class="muted">No horses – add them in the Horses tab.</td></tr>`;
       $("#pvbody").querySelectorAll("[data-hadd]").forEach(b => b.onclick = () => { const h = shown[+b.dataset.hadd].h; editPrev(kind, null, {name:h.name, pid:h.pid, given:today()}); });
@@ -1408,6 +1411,36 @@ function renderPrevList(main){
   $("#pvCsv").onclick = () => saveFile(`${kind === "vacc" ? "vaccination" : "deworming"}_${today()}.csv`, toCSV(rows()));
   draw();
 }
+
+function renderPrevBoth(main, tabs){
+  main.innerHTML = `<div class="panel">${tabs}
+    <div class="row" style="margin-bottom:8px"><input id="pvq" placeholder="Search horse (Arabic / English), ID, drug…" value="${esc(prevQ)}" style="max-width:380px">
+      <span class="spacer"></span><button id="pvXlsx">⬇ Excel</button><button id="pvBulkV">💉 Vaccinate many</button><button id="pvBulkD">🪱 Deworm many</button><button class="pri" id="pvAddV">+ Vaccination</button><button class="pri" id="pvAddD">+ Deworming</button></div>
+    <p class="small muted" id="pvcount"></p>
+    <div class="tbl"><table><thead><tr><th>No.</th><th>Horse</th><th>ID</th><th style="border-left:2px solid var(--line)">💉 Last vaccination</th><th>Given</th><th>Next</th><th>Status</th><th style="border-left:2px solid var(--line)">🪱 Last deworming</th><th>Given</th><th>Next</th><th>Status</th><th></th></tr></thead><tbody id="pvbody"></tbody></table></div>
+    <p class="small muted">Every horse from the Horses list, with its latest vaccination and deworming. Click a horse for its full record. “Due” = next date within ${remindDays()} days.</p></div>`;
+  let shown = [];
+  const cell = (r, latest) => { const st = r ? prevStatus(r, latest) : ["No record","p-n"];
+    return `<td style="border-left:2px solid var(--line)">${r ? `<b>${esc(r.drug||"")}</b>` : '<span class="muted">–</span>'}</td><td>${esc(r && r.given ? dshow(r.given) : "")}</td><td>${esc(r && r.next ? dshow(r.next) : "")}</td><td><span class="pill ${st[1]}">${esc(st[0])}</span></td>`; };
+  const draw = () => {
+    const q = prevQ.trim().toLowerCase(), latest = latestPrev();
+    shown = prevHorses().filter(h => !q || [h.name, h.nameEn, h.pid, h.cat, ...h.aliases, ...prevOf(h, "vacc").map(r => r.drug), ...prevOf(h, "deworm").map(r => r.drug)].some(x => hk(x).includes(q)))
+      .map(h => ({h, v:prevOf(h, "vacc")[0] || null, d:prevOf(h, "deworm")[0] || null}));
+    $("#pvcount").textContent = `${shown.length} horse(s) · ${shown.filter(x => !x.v).length} without vaccination · ${shown.filter(x => !x.d).length} without deworming`;
+    $("#pvbody").innerHTML = shown.map(({h, v, d}, i) => `<tr><td>${esc(h.listNo)}</td><td><button class="linkbtn" data-pat="1" data-pid="${esc(h.pid)}" data-pname="${esc(h.name)}"><b>${esc(h.nameEn || h.name)}</b></button>${h.nameEn && h.nameEn !== h.name ? ` <span class="ar">${esc(h.name)}</span>` : ""}</td><td>${esc(h.pid)}</td>
+      ${cell(v, latest)}${cell(d, latest)}<td style="white-space:nowrap"><button class="small" data-av="${i}">+ 💉</button> <button class="small" data-ad="${i}">+ 🪱</button></td></tr>`).join("") || `<tr><td colspan="12" class="muted">No horses – add them in the Horses tab.</td></tr>`;
+    bindPat($("#pvbody"));
+    $("#pvbody").querySelectorAll("[data-av]").forEach(b => b.onclick = () => { const h = shown[+b.dataset.av].h; editPrev("vacc", null, {name:h.name, pid:h.pid, given:today()}); });
+    $("#pvbody").querySelectorAll("[data-ad]").forEach(b => b.onclick = () => { const h = shown[+b.dataset.ad].h; editPrev("deworm", null, {name:h.name, pid:h.pid, given:today()}); });
+  };
+  main.querySelectorAll("[data-pk]").forEach(b => b.onclick = () => { histMode = b.dataset.pk; render(true); });
+  $("#pvq").addEventListener("input", e => { prevQ = e.target.value; draw(); });
+  $("#pvAddV").onclick = () => editPrev("vacc", null); $("#pvAddD").onclick = () => editPrev("deworm", null);
+  $("#pvBulkV").onclick = () => editPrevBulk("vacc"); $("#pvBulkD").onclick = () => editPrevBulk("deworm");
+  $("#pvXlsx").onclick = () => saveFile(`vaccination_deworming_${today()}.xlsx`, makeXlsx([{name:"All horses", rows:[["No.","Horse","Name (English)","ID","Category","Last vaccination","Given","Next","Status","Last deworming","Given","Next","Status"],
+    ...shown.map(({h, v, d}) => [h.listNo, h.name, h.nameEn, h.pid, h.cat, v ? v.drug||"" : "", v ? v.given||"" : "", v ? v.next||"" : "", v ? prevStatus(v)[0] : "No record", d ? d.drug||"" : "", d ? d.given||"" : "", d ? d.next||"" : "", d ? prevStatus(d)[0] : "No record"])]}]));
+  draw();
+}
 // one vaccination / deworming for many horses at once (same drug and date)
 function editPrevBulk(kind){
   const H = prevHorses();
@@ -1424,7 +1457,7 @@ function editPrevBulk(kind){
       <select id="pb_cat" style="max-width:220px"><option value="">All categories</option>${cats.map(c => `<option>${esc(c)}</option>`).join("")}</select>
       <button type="button" class="small" id="pb_all">Select shown</button><button type="button" class="small" id="pb_none">Clear</button></div>
     <div id="pb_list" style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 10px">
-      ${H.map((h, i) => `<label class="ckl" data-i="${i}" data-txt="${esc([h.name, h.nameEn, h.pid, h.cat].join(" ").toLowerCase())}" data-cat="${esc(h.cat)}"><input type="checkbox" class="pb_h" value="${i}"> <span class="ar">${esc(h.name)}</span>${h.nameEn && h.nameEn !== h.name ? ` <span class="small muted">${esc(h.nameEn)}</span>` : ""}</label>`).join("") || '<span class="muted">No horses – add them in the Horses tab.</span>'}</div>
+      ${H.map((h, i) => `<label class="ckl" data-i="${i}" data-txt="${esc([h.name, h.nameEn, h.pid, h.cat].join(" ").toLowerCase())}" data-cat="${esc(h.cat)}"><input type="checkbox" class="pb_h" value="${i}"> ${h.listNo ? `<span class="small muted">${esc(h.listNo)}.</span> ` : ""}${esc(pLabel(h))}</label>`).join("") || '<span class="muted">No horses – add them in the Horses tab.</span>'}</div>
     <div class="row" style="margin-top:12px"><span class="spacer"></span><button data-act="close">Cancel</button><button class="pri" data-act="save">Save for selected horses</button></div>`, async (act, close) => {
     if (act === "close") return close();
     if (act !== "save") return;
@@ -1453,13 +1486,18 @@ function editPrevBulk(kind){
 }
 function editPrev(kind, r, preset){
   const isNew = !r; r = r || Object.assign({given:today(), next:"", drug:"", note:"", pid:"", name:""}, preset || {});
-  const names = [...new Set([...(S.horses || []).flatMap(h => [h.name, h.nameEn]), ...S.visits.map(v => v.name), ...S.preventive.map(p => p.name)].filter(Boolean))].sort();
+  const PH = prevHorses(), findPH = t => { t = String(t || "").trim(); if (!t) return null; return PH.find(h => hk(pLabel(h)) === hk(t)) || PH.find(h => [h.name, h.nameEn, ...h.aliases].some(x => hk(x) === hk(t))) || null; };
+  const nextNo = () => String(Math.max(0, ...(S.horses || []).map(h => parseFloat(h.listNo) || 0)) + 1);
+  const ph0 = findPH(r.name) || (r.pid ? PH.find(h => hk(h.pid) === hk(r.pid)) : null);
+  const names = PH.map(pLabel).filter(Boolean);
   const re = kind === "vacc" ? /vacc|tetan|influenza|rabies|strangles|herpes|ehv|wnv|encephal/i : /anthelm|dewor|worm|ivermect|fenbend|pyrantel|praziq|moxidect|abamect|oxibend|eqvalan/i;
   const drugs = [...new Set([...S.preventive.filter(p => p.kind === kind).map(p => p.drug), ...S.meds.filter(m => re.test([m.type, m.name, m.function, m.indication].join(" "))).map(m => m.name)].filter(Boolean))].sort();
   modal(`<h2>${isNew ? "Add" : "Edit"} ${KLAB[kind].toLowerCase()}</h2>
     <div class="grid g2">
-      <label for="pr_name">Horse name<input id="pr_name" list="pr_names" value="${esc(r.name||"")}" autocomplete="off"></label>
+      <label for="pr_name" style="grid-column:1/-1">Horse name (English – Arabic)<input id="pr_name" list="pr_names" value="${esc(ph0 ? pLabel(ph0) : (r.name||""))}" autocomplete="off" placeholder="Pick from the list or type a new horse"></label>
+      <label for="pr_no">No. (horse list number)<input id="pr_no" value="${esc(ph0 ? ph0.listNo : "")}" placeholder="e.g. ${nextNo()}"></label>
       <label for="pr_pid">Patient ID<input id="pr_pid" value="${esc(r.pid||"")}"></label>
+      <p class="small muted" id="pr_hint" style="grid-column:1/-1;margin:0">${ph0 ? "" : "A horse not in the list is added to the Horses list with this No. when you save."}</p>
       <label for="pr_drug" style="grid-column:1/-1">Name of drug${kind === "vacc" ? " / vaccine" : ""}<input id="pr_drug" list="pr_drugs" value="${esc(r.drug||"")}" autocomplete="off"></label>
       <label for="pr_given">Given date<input id="pr_given" type="date" value="${esc(r.given||"")}"></label>
       <label for="pr_next">Next date<input id="pr_next" type="date" value="${esc(r.next||"")}"></label>
@@ -1471,8 +1509,14 @@ function editPrev(kind, r, preset){
     if (act === "close") return close();
     if (act === "del") return confirmBox(`Delete this ${KLAB[kind].toLowerCase()} record?`, async () => { await unlinkPrev(r); await W(() => db.doc("preventive/" + r._id).delete()); close(); toast("Deleted."); });
     if (act !== "save") return;
-    const d = {kind, name:$("#pr_name").value.trim(), pid:$("#pr_pid").value.trim(), drug:$("#pr_drug").value.trim(), given:$("#pr_given").value, next:$("#pr_next").value, note:$("#pr_note").value.trim()};
+    const typed = $("#pr_name").value.trim(), ph = findPH(typed) || (typed ? null : PH.find(h => hk(h.pid) && hk(h.pid) === hk($("#pr_pid").value)) || null), no = $("#pr_no").value.trim();
+    const d = {kind, name:ph ? ph.name : typed, pid:$("#pr_pid").value.trim() || (ph ? ph.pid : ""), drug:$("#pr_drug").value.trim(), given:$("#pr_given").value, next:$("#pr_next").value, note:$("#pr_note").value.trim()};
     if (!d.name && !d.pid) { toast("Type the horse's name or ID."); return; }
+    if (no && (S.horses || []).some(h => String(h.listNo) === no && (!ph || !ph.rec || h._id !== ph.rec._id))) { toast(`No. ${no} is already used by another horse.`); return; }
+    if (!ph && typed) { // new horse → add to the Horses list with its number
+      const ar = /[؀-ۿ]/.test(typed), key = hDocId(d.pid || typed), id = S.horses.some(h => h._id === key) ? key + "_" + Date.now().toString(36) : key;
+      await W(() => db.doc("horses/" + id).set({name:ar ? typed : "", nameEn:ar ? "" : typed, listNo:no, pid:d.pid, updatedAt:new Date().toISOString()})); toast(`${typed} added to the Horses list${no ? " as No. " + no : ""}.`);
+    } else if (ph && ph.rec && no && String(ph.rec.listNo || "") !== no) { const k = {}; Object.entries(ph.rec).forEach(([a, v]) => { if (a !== "_id") k[a] = v; }); k.listNo = no; await W(() => db.doc("horses/" + ph.rec._id).set(k)); }
     if (!d.drug) { toast("Type the name of the drug."); return; }
     if (d.next && d.given && d.next < d.given) { toast("The next date is before the given date."); return; }
     if (isNew) { const ref = db.collection("preventive").doc(); await W(() => ref.set(Object.assign({}, d, {at:new Date().toISOString()}))); if (d.given) await linkPrev(ref.id, d); }
@@ -1485,9 +1529,12 @@ function editPrev(kind, r, preset){
   });
   const bg = [...document.querySelectorAll(".modal-bg")].pop();
   bg.querySelectorAll("[data-plus]").forEach(b => b.onclick = () => { bg.querySelector("#pr_next").value = addMonths(bg.querySelector("#pr_given").value || today(), +b.dataset.plus); });
-  bg.querySelector("#pr_name").addEventListener("change", e => { const pid = bg.querySelector("#pr_pid"); if (pid.value) return; const nm = e.target.value.trim().toLowerCase();
-    const hr = horseRec({name:e.target.value.trim()}); if (hr && hr.pid) { pid.value = hr.pid; return; }
-    const v = [...S.visits, ...S.preventive].find(x => (x.name||"").trim().toLowerCase() === nm && x.pid); if (v) pid.value = v.pid; });
+  const onName = e => { const pid = bg.querySelector("#pr_pid"), noEl = bg.querySelector("#pr_no"), hint = bg.querySelector("#pr_hint"), t = e.target.value.trim(), h = findPH(t);
+    if (h) { if (pLabel(h) !== t && e.type === "change") e.target.value = pLabel(h); if (h.pid && !pid.value) pid.value = h.pid; noEl.value = h.listNo || ""; hint.textContent = h.rec ? "" : "This name is not in the Horses list yet – it will be added with this No.";
+      if (!h.pid && !pid.value) { const v = [...S.visits, ...S.preventive].find(x => ofHorse({pid:"", name:h.name}, x) && x.pid); if (v) pid.value = v.pid; } }
+    else if (t) { if (!noEl.value || e.type === "change") noEl.value = noEl.value || nextNo(); hint.textContent = `New horse – it will be added to the Horses list as No. ${noEl.value} (change the number if you like).`; }
+  };
+  bg.querySelector("#pr_name").addEventListener("change", onName); bg.querySelector("#pr_name").addEventListener("input", e => { if (findPH(e.target.value)) onName(e); });
 }
 function patPrev(){
   if (!PAT) return [];
@@ -1542,7 +1589,7 @@ function sameHorse(a, b){ if (!a || !b) return false; if (hk(a.pid) && hk(b.pid)
 const slug = s => String(s || "horse").replace(/[^\w-]+/g, "_");
 // Horse File page (horse-file.html) keeps one record per horse in "horses" – body weight is shared with prescriptions
 // horse-list record (Arabic + English name) – matches a visit/patient by ID, Arabic name or English name
-const hNames = h => [h && h.name, h && h.nameEn].filter(Boolean).map(hk);
+const hNames = h => [h && h.name, h && h.nameEn, ...((h && Array.isArray(h.aliases)) ? h.aliases : [])].filter(Boolean).map(hk);
 function hMatch(h, p){ if (!h || !p) return false; if (hk(h.pid) && hk(p.pid)) return hk(h.pid) === hk(p.pid); const n = hk(p.name); return !!n && hNames(h).includes(n); }
 const horseRec = p => (S.horses || []).find(h => hMatch(h, p)) || null;
 const aliasNames = p => { const h = horseRec(p); return [...new Set([hk(p.name), ...(h ? hNames(h) : [])].filter(Boolean))]; };
@@ -2183,6 +2230,77 @@ function manageHorseCols(){
       c.splice(i, 1); await saveHorseCols(c); close(); toast("Column deleted."); });
   });
 }
+
+/* ---------- find & merge horses whose names differ only by spelling ---------- */
+const normAr = s => String(s || "").replace(/[ً-ْـ]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/^ال/, "").replace(/[^ء-ي]/g, "");
+const normEn = s => String(s || "").toLowerCase().replace(/^(al|el)[\s\-]+/, "").replace(/[^a-z]/g, "");
+const skel = s => normEn(s).replace(/(.)\1+/g, "$1").replace(/(?!^)[aeiouyw]/g, "").replace(/q/g, "k").replace(/gh/g, "g");
+function lev(a, b){ if (a === b) return 0; const m = a.length, n = b.length; if (!m || !n) return m || n; let p = [...Array(n + 1).keys()];
+  for (let i = 1; i <= m; i++) { const c = [i]; for (let j = 1; j <= n; j++) c[j] = Math.min(p[j] + 1, c[j-1] + 1, p[j-1] + (a[i-1] === b[j-1] ? 0 : 1)); p = c; } return p[n]; }
+function similarNames(x, y){
+  const ax = [x.name, ...(x.aliases || [])].map(normAr).filter(v => v.length >= 2), ay = [y.name, ...(y.aliases || [])].map(normAr).filter(v => v.length >= 2);
+  const ex = [x.nameEn, x.name, ...(x.aliases || [])].map(normEn).filter(v => v.length >= 3), ey = [y.nameEn, y.name, ...(y.aliases || [])].map(normEn).filter(v => v.length >= 3);
+  const aEq = ax.some(a => ay.includes(a)), eEq = ex.some(a => ey.includes(a));
+  if (aEq || eEq) return true;                                   // same name after removing hamza / ta marbuta / "al", spaces, case
+  const aNear = ax.some(a => ay.some(b => Math.min(a.length, b.length) >= 6 && lev(a, b) <= 1));
+  const eNear = ex.some(a => ey.some(b => (skel(a).length >= 3 && skel(a) === skel(b)) || (Math.min(a.length, b.length) >= 6 && lev(a, b) <= 1)));
+  if (ax.length && ay.length && ex.length && ey.length) return aNear && eNear; // both spellings must agree
+  return (ax.length && ay.length) ? aNear : eNear;
+}
+function dupGroups(){
+  const H = S.horses || [], parent = H.map((_, i) => i), f = i => parent[i] === i ? i : (parent[i] = f(parent[i]));
+  for (let i = 0; i < H.length; i++) for (let j = i + 1; j < H.length; j++) {
+    const a = H[i], b = H[j]; if (hk(a.pid) && hk(b.pid) && hk(a.pid) !== hk(b.pid)) continue;
+    if ((hk(a.pid) && hk(a.pid) === hk(b.pid)) || similarNames(a, b)) parent[f(i)] = f(j); }
+  const g = new Map(); H.forEach((h, i) => { const r = f(i); if (!g.has(r)) g.set(r, []); g.get(r).push(h); });
+  const score = h => (h.listNo ? 100 : 0) + (h.pid ? 50 : 0) + Object.values(h).filter(v => v !== "" && v != null).length;
+  return [...g.values()].filter(x => x.length > 1).map(x => x.sort((a, b) => score(b) - score(a)));
+}
+function unlinkedNames(){ // names used in visits / vaccination / Horse Files that match no horse in the list
+  const m = new Map();
+  [...S.visits, ...S.preventive, ...(S.horseFiles || [])].forEach(x => { const n = String(x.name || "").trim(); if (!n || horseRec({pid:x.pid, name:n})) return; const k = hk(n); m.set(k, {name:n, pid:x.pid || (m.get(k) || {}).pid || "", n:((m.get(k) || {}).n || 0) + 1}); });
+  return [...m.values()].map(u => ({...u, guess:(S.horses || []).find(h => similarNames(h, {name:u.name, nameEn:u.name})) || null}));
+}
+const hLabel = h => [h.listNo && "No. " + h.listNo, h.nameEn, h.name, h.pid && "ID " + h.pid].filter(Boolean).join(" · ");
+async function mergeHorses(keep, others){
+  const k = {}; Object.entries(keep).forEach(([a, v]) => { if (a !== "_id") k[a] = v; });
+  const al = new Set(Array.isArray(k.aliases) ? k.aliases : []);
+  others.forEach(o => { Object.entries(o).forEach(([a, v]) => { if (a === "_id" || a === "aliases") return; if ((k[a] === undefined || k[a] === "" || k[a] === null) && v !== "" && v !== undefined) k[a] = v; });
+    [o.name, o.nameEn, ...(o.aliases || [])].forEach(n => { if (n) al.add(n); }); });
+  [k.name, k.nameEn].forEach(n => al.delete(n)); k.aliases = [...al].filter(n => !hNames({name:k.name, nameEn:k.nameEn}).includes(hk(n)));
+  k.updatedAt = new Date().toISOString();
+  await W(() => db.doc("horses/" + keep._id).set(k));
+  for (const o of others) await W(() => db.doc("horses/" + o._id).delete());
+}
+function findDuplicates(){
+  const G = dupGroups(), U = unlinkedNames(), H = (S.horses || []).slice().sort((a,b) => ((parseFloat(a.listNo)||1e9) - (parseFloat(b.listNo)||1e9)) || String(a.name||"").localeCompare(String(b.name||"")));
+  const opts = sel => H.map(h => `<option value="${esc(h._id)}"${sel && sel._id === h._id ? " selected" : ""}>${esc(hLabel(h))}</option>`).join("");
+  modal(`<h2>🔀 Find &amp; merge duplicate horses</h2>
+    <p class="small muted">Horses that look like the same horse with a different spelling. Choose the one to <b>keep</b> – the others are merged into it (empty details are filled from them) and their spellings are kept as <b>aliases</b>, so old prescriptions, vaccinations and Horse Files stay linked. Nothing is merged until you press Merge.</p>
+    <h3>Possible duplicates (${G.length})</h3>
+    ${G.length ? G.map((g, gi) => `<div class="panel" style="margin:6px 0;padding:8px">${g.map((h, i) => `<label class="ckl" style="display:flex;gap:8px"><input type="radio" name="dk${gi}" value="${esc(h._id)}"${i === 0 ? " checked" : ""}> <b class="ar">${esc(h.name || "")}</b> ${esc(h.nameEn || "")} <span class="small muted">${esc([h.listNo && "No. " + h.listNo, h.pid && "ID " + h.pid, h.sex, h.birthYear].filter(Boolean).join(" · "))}</span></label>`).join("")}
+      <div class="row" style="margin-top:4px"><span class="small muted">● = keep this one</span><span class="spacer"></span><button class="small pri" data-act="mg:${gi}">Merge</button></div></div>`).join("") : '<p class="muted">No look-alike names found.</p>'}
+    <h3 style="margin-top:12px">Merge any two by hand</h3>
+    <div class="row"><select id="mg_keep" style="max-width:330px"><option value="">Keep…</option>${opts()}</select><span>←</span><select id="mg_drop" style="max-width:330px"><option value="">merge into it…</option>${opts()}</select><button class="small pri" data-act="mgman">Merge</button></div>
+    <h3 style="margin-top:12px">Names in records that are not in the horse list (${U.length})</h3>
+    ${U.length ? `<div class="tbl"><table><thead><tr><th>Name used</th><th>Records</th><th>Link to horse</th><th></th></tr></thead><tbody>${U.map((u, i) => `<tr><td><b>${esc(u.name)}</b>${u.pid ? ` <span class="small muted">ID ${esc(u.pid)}</span>` : ""}</td><td class="num">${u.n}</td>
+      <td><select id="ul_${i}" style="max-width:300px"><option value="">— choose —</option>${opts(u.guess)}</select></td><td><button class="small" data-act="ul:${i}">Link</button></td></tr>`).join("")}</tbody></table></div>`
+      : '<p class="muted">All names in your records match a horse in the list.</p>'}
+    <div class="row" style="margin-top:12px"><span class="spacer"></span><button class="pri" data-act="close">Done</button></div>`, async (act, close) => {
+    if (act === "close") return close();
+    const bg = [...document.querySelectorAll(".modal-bg")].pop(), q = x => bg.querySelector(x);
+    const [a, n] = act.split(":"), i = +n;
+    const again = () => { close(); setTimeout(findDuplicates, 80); };
+    if (a === "mg") { const keepId = (bg.querySelector(`input[name="dk${i}"]:checked`) || {}).value, keep = G[i].find(h => h._id === keepId), others = G[i].filter(h => h._id !== keepId);
+      return confirmBox(`Merge ${others.map(o => o.nameEn || o.name).join(", ")} into ${keep.nameEn || keep.name}? The merged entries are removed from the horse list; their names become aliases of ${keep.nameEn || keep.name}.`, async () => { await mergeHorses(keep, others); toast("Merged."); again(); }); }
+    if (a === "mgman") { const keep = H.find(h => h._id === q("#mg_keep").value), drop = H.find(h => h._id === q("#mg_drop").value);
+      if (!keep || !drop || keep === drop) { toast("Choose two different horses."); return; }
+      return confirmBox(`Merge ${drop.nameEn || drop.name} into ${keep.nameEn || keep.name}?`, async () => { await mergeHorses(keep, [drop]); toast("Merged."); again(); }); }
+    if (a === "ul") { const h = H.find(x => x._id === q("#ul_" + i).value); if (!h) { toast("Choose the horse."); return; }
+      const k = {}; Object.entries(h).forEach(([a2, v]) => { if (a2 !== "_id") k[a2] = v; }); k.aliases = [...new Set([...(h.aliases || []), U[i].name])];
+      await W(() => db.doc("horses/" + h._id).set(k)); toast(`“${U[i].name}” now belongs to ${h.nameEn || h.name}.`); again(); }
+  });
+}
 function renderHorses(main){
   const all = (S.horses || []).slice().sort((a,b) => ((parseFloat(a.listNo) || 1e9) - (parseFloat(b.listNo) || 1e9)) || String(a.name||"").localeCompare(String(b.name||"")));
   const nList = all.filter(h => h.listNo).length, cnt = f => all.filter(f).length;
@@ -2191,7 +2309,7 @@ function renderHorses(main){
     <div class="tile"><div class="n" style="color:var(--warn)">${cnt(h => horseSvc(h).startsWith("Below"))}</div><div class="l">Young (&lt;5)</div></div>
     <div class="tile"><div class="n" style="color:var(--bad)">${cnt(h => horseSvc(h).startsWith("Over"))}</div><div class="l">Aged (&gt;15)</div></div></div>
   <div class="panel"><div class="row"><h2 style="margin:0">Horses / الخيل</h2><span class="spacer"></span>
-    ${nList < H_BUILTIN.n ? `<button id="hSeed">🔓 Load built-in horse list (${H_BUILTIN.n})</button>` : ""}<button id="hXlsx">⬇ Excel</button><button id="hSum">📋 Horse List &amp; summary</button><button id="hCols">⚙ Columns</button><button id="hAddCol">+ Add column</button><button class="pri" id="hAdd">+ Add horse</button></div>
+    ${nList < H_BUILTIN.n ? `<button id="hSeed">🔓 Load built-in horse list (${H_BUILTIN.n})</button>` : ""}<button id="hXlsx">⬇ Excel</button><button id="hSum">📋 Horse List &amp; summary</button><button id="hDup">🔀 Find &amp; merge duplicates</button><button id="hCols">⚙ Columns</button><button id="hAddCol">+ Add column</button><button class="pri" id="hAdd">+ Add horse</button></div>
     <p class="small muted">All horse details in one place – add, edit or delete here. New prescription and the Horse File use this straight away: type a horse's name or ID there and its details pop up to fill (you confirm first), and each field shows the saved value when you click into it.</p>
     <div class="row" style="margin-bottom:8px">${[["all","All"], ...HCATS.map(c => [c[0], c[0].split(" / ")[1] || c[0]])].map(([c,t]) => `<button class="small ${c===horseC?"pri":""}" data-hc="${esc(c)}">${esc(t)} (${c==="all"?all.length:cnt(h => hk(h.category) === hk(c))})</button>`).join("")}</div>
     <input id="hq" placeholder="Search name (Arabic / English), ID, type, notes…" value="${esc(horseQ)}" style="max-width:380px">
@@ -2218,17 +2336,17 @@ function renderHorses(main){
   $("#hXlsx").onclick = () => saveFile(`horses_${today()}.xlsx`, makeXlsx([{name:"Horses", rows:[["No.","Patient ID","Name (Arabic)","Name (English)","Type / Sex","Breed","Birth date","Birth year","Age","Body weight kg","Weight date","Color","Rider","Microchip","Military No.","Source","Category","Notes","Service status",...HCOLS().map(c => c.label)],
     ...HORSES_SHOWN.map(h => [h.listNo||"",h.pid||"",h.name||"",h.nameEn||"",h.sex||"",h.breed||"",h.birth||"",h.birthYear||"",horseAge(h)??"",h.weightKg||"",h.weightDate||"",h.color||"",h.rider||"",h.microchip||"",h.militaryNo||"",h.source||"",h.category||"",h.listNotes||"",horseSvc(h),...HCOLS().map(c => hcolShow(c, h[c.key]))])]}]));
   const sb = $("#hSeed"); if (sb) sb.onclick = seedHorses;
-  $("#hAddCol").onclick = () => editHorseCol(-1); $("#hCols").onclick = manageHorseCols;
+  $("#hAddCol").onclick = () => editHorseCol(-1); $("#hCols").onclick = manageHorseCols; $("#hDup").onclick = findDuplicates;
   draw();
 }
 let HORSES_SHOWN = [];
 const HF = [["listNo","No.","text"],["pid","Patient ID","text"],["name","Name (Arabic) / اسم الخيل","text"],["nameEn","Name (English)","text"],["sex","Type / Sex – نوع الخيل","dl:dl_htypes"],["breed","Breed","dl:dl_hbreeds"],
   ["birth","Birth date (if known)","date"],["birthYear","Birth year","number"],["weightKg","Body weight (kg)","number"],["weightDate","Weight date","date"],["color","Color","text"],["rider","Rider","text"],
-  ["microchip","Microchip No.","text"],["militaryNo","Military No.","text"],["source","Source","dl:dl_hsrc"],["category","Category / purpose","dl:dl_hcat"],["listNotes","Notes","text"]];
+  ["microchip","Microchip No.","text"],["militaryNo","Military No.","text"],["source","Source","dl:dl_hsrc"],["category","Category / purpose","dl:dl_hcat"],["listNotes","Notes","text"],["aliases","Other spellings / aliases (comma between)","text"]];
 function editHorse(id){
   const h = id ? S.horses.find(x => x._id === id) : {};
   modal(`<h2>${id ? "Edit horse – " + esc([h.name, h.nameEn].filter(Boolean).join(" / ")) : "Add horse"}</h2><div class="grid g4">
-    ${HF.map(([k,l,t]) => { const dl = t.startsWith("dl:") ? t.slice(3) : ""; return `<label${k==="listNotes"||k==="category"?' style="grid-column:span 2"':""}>${esc(l)}<input id="eh_${k}" type="${dl ? "text" : t}"${dl ? ` list="${dl}"` : ""}${t==="number"?' step="any"':""} value="${esc(h[k] ?? "")}"></label>`; }).join("")}
+    ${HF.map(([k,l,t]) => { const dl = t.startsWith("dl:") ? t.slice(3) : ""; return `<label${k==="listNotes"||k==="category"?' style="grid-column:span 2"':""}>${esc(l)}<input id="eh_${k}" type="${dl ? "text" : t}"${dl ? ` list="${dl}"` : ""}${t==="number"?' step="any"':""} value="${esc(Array.isArray(h[k]) ? h[k].join(", ") : (h[k] ?? ""))}"></label>`; }).join("")}
     ${HCOLS().map(c => `<label>${esc(c.label)}${hcolInput(c, "ehc_" + c.key, h[c.key])}</label>`).join("")}</div>
     <datalist id="dl_htypes">${HTYPES.map(x => `<option>${esc(x)}</option>`).join("")}</datalist><datalist id="dl_hsrc">${HSRC.map(x => `<option>${esc(x)}</option>`).join("")}</datalist>
     <datalist id="dl_hcat">${HCATS.map(x => `<option>${esc(x[0])}</option>`).join("")}</datalist><datalist id="dl_hbreeds">${(L().breeds || []).map(x => `<option>${esc(x)}</option>`).join("")}</datalist>
@@ -2237,6 +2355,7 @@ function editHorse(id){
     if (act === "close") return close();
     if (act === "del") return confirmBox(`Delete ${h.name || h.nameEn || "this horse"} from the horse list permanently? Its prescriptions, vaccinations and saved Horse Files are kept.`, async () => { await W(() => db.doc("horses/" + id).delete()); close(); toast("Horse deleted."); });
     const d = {}; HF.forEach(([k]) => { d[k] = $("#eh_" + k).value.trim(); });
+    d.aliases = [...new Set(d.aliases.split(/[,،]/).map(x => x.trim()).filter(Boolean))];
     HCOLS().forEach(c => { const el = $("#ehc_" + c.key); if (el) d[c.key] = c.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value.trim(); });
     if (!d.name && !d.nameEn && !d.pid) { toast("Enter a name or Patient ID."); return; }
     if (d.birth && !d.birthYear) d.birthYear = d.birth.slice(0,4);
@@ -2591,7 +2710,7 @@ async function bindHfLists(){
 function renderSettings(main){
   const st = ST(), l = L();
   const ta = (k, lab) => `<label>${lab} (one per line)<textarea id="ls_${k}" rows="6">${esc((l[k]||[]).join("\n"))}</textarea></label>`;
-  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v11 · 16 Nov 2026</span></div><div class="grid g4">
+  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v12 · 16 Nov 2026</span></div><div class="grid g4">
     <label>Clinic / unit name<input id="st_clinic" value="${esc(st.clinic)}"></label><label>Veterinarian (printed)<input id="st_vet" value="${esc(st.vet)}"></label>
     <label>Max IM volume per site (ml)<input id="st_imMax" type="number" value="${esc(st.imMax)}"></label><label>Expiry warning (days)<input id="st_expiryDays" type="number" value="${esc(st.expiryDays)}"></label><label>Vaccination / deworming reminder (days before)<input id="st_remindDays" type="number" value="${esc(st.remindDays ?? 14)}"></label>
     <label>Next vaccination after (months)<input id="st_vaccMonths" type="number" min="0" value="${esc(st.vaccMonths ?? 12)}"></label><label>Next deworming after (months)<input id="st_dewormMonths" type="number" min="0" value="${esc(st.dewormMonths ?? 3)}"></label></div>
