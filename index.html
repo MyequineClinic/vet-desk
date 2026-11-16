@@ -188,6 +188,7 @@ tr.hc-aged td{background:#f0f0f0}tr.hc-jump td{background:#eaf2fb}tr.hc-cer td{b
   <nav id="nav">
     <a href="#rx" data-v="rx">New prescription</a>
     <a href="#history" data-v="history">History &amp; search</a>
+    <a href="#vaccdew" data-v="vaccdew">Vaccination &amp; deworming</a>
     <a href="#notes" data-v="notes">Notes</a>
     <a href="#stock" data-v="stock">Stock</a>
     <a href="#horses" data-v="horses">Horses / الخيل</a>
@@ -391,7 +392,7 @@ function calcLine(ln, P){
 }
 
 /* ---------------- router ---------------- */
-const VIEWS = {rx:renderRx, patient:renderPatient, history:renderHistory, notes:renderNotes, stock:renderStock, horses:renderHorses, meds:renderMeds, finder:renderFinder, diseases:renderDiseases, settings:renderSettings};
+const VIEWS = {rx:renderRx, patient:renderPatient, history:renderHistory, vaccdew:renderPrevList, notes:renderNotes, stock:renderStock, horses:renderHorses, meds:renderMeds, finder:renderFinder, diseases:renderDiseases, settings:renderSettings};
 let view = "rx";
 function route(){ const h = (location.hash||"#rx").slice(1); view = VIEWS[h] ? h : "rx"; document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.v === view)); render(true); }
 window.addEventListener("hashchange", route);
@@ -1329,7 +1330,7 @@ function editNote(id){
 
 /* ---------------- vaccination & deworming ---------------- */
 const KLAB = {vacc:"Vaccination", deworm:"Deworming"};
-let histMode = "visits", prevQ = "", prevF = "all", notifOpen = "", notifHidden = false;
+let histMode = "vacc", prevQ = "", prevF = "horses", notifOpen = "", notifHidden = false;
 const remindDays = () => { const n = N(ST().remindDays); return n === null ? 14 : n; };
 const daysUntil = d => Math.round((new Date(d + "T00:00:00") - new Date(today() + "T00:00:00")) / 864e5);
 function addMonths(d, n){ const x = new Date((d || today()) + "T00:00:00"); if (isNaN(x)) return ""; const day = x.getDate(); x.setMonth(x.getMonth() + n); if (x.getDate() < day) x.setDate(0); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`; }
@@ -1350,40 +1351,109 @@ function prevStatus(r, latest){
 function dueList(kind){ return [...latestPrev().values()].filter(r => r.kind === kind && r.next && daysUntil(r.next) <= remindDays()).sort((a,b) => (a.next||"").localeCompare(b.next||"")); }
 function histSel(){ return `<select id="hmode" aria-label="Record type" style="width:auto;font-weight:700">${[["visits","Visits"],["vacc","Vaccination record"],["deworm","Deworming record"]].map(([v,t]) => `<option value="${v}"${v===histMode?" selected":""}>${t}</option>`).join("")}</select>`; }
 function bindHistSel(){ const h = $("#hmode"); if (h) h.onchange = e => { histMode = e.target.value; render(true); }; }
+// all horses: horse list + any horse that only appears in vaccination / deworming records
+function prevHorses(){
+  const out = (S.horses || []).map(h => ({pid:h.pid||"", name:h.name||h.nameEn||"", nameEn:h.nameEn||"", listNo:h.listNo||"", cat:h.category||"", rec:h}));
+  S.preventive.forEach(r => { if (!out.some(h => ofHorse({pid:h.pid, name:h.name}, r) || (h.nameEn && hk(h.nameEn) === hk(r.name)))) { if (!out.some(h => !h.rec && hk(h.name) === hk(r.name || r.pid))) out.push({pid:r.pid||"", name:r.name||r.pid||"", nameEn:"", listNo:"", cat:"", rec:null}); } });
+  return out.sort((a,b) => ((parseFloat(a.listNo) || 1e9) - (parseFloat(b.listNo) || 1e9)) || String(a.name).localeCompare(String(b.name)));
+}
+const prevOf = (h, kind) => S.preventive.filter(r => r.kind === kind && (ofHorse({pid:h.pid, name:h.name}, r) || (h.nameEn && hk(h.nameEn) === hk(r.name)))).sort((a,b) => (b.given||"").localeCompare(a.given||"") || (b.at||"").localeCompare(a.at||""));
 function renderPrevList(main){
-  const kind = histMode;
-  main.innerHTML = `<div class="panel"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">History &amp; search</h2>${histSel()}<span class="spacer"></span><button id="pvXlsx">⬇ Excel</button><button id="pvCsv">⬇ CSV</button><button class="pri" id="pvAdd">+ Add ${KLAB[kind].toLowerCase()}</button></div>
-    <div class="row"><input id="pvq" placeholder="Search horse, ID, drug or note…" value="${esc(prevQ)}" style="max-width:420px">
-      <select id="pvf" style="max-width:240px">${[["all","All records"],["due","Due & overdue"],["latest","Latest per horse & drug"]].map(([v,t]) => `<option value="${v}"${v===prevF?" selected":""}>${t}</option>`).join("")}</select></div>
+  const kind = histMode === "deworm" ? "deworm" : "vacc";
+  const tabBtn = (k, t) => `<button class="${k===kind?"pri":""}" data-pk="${k}" style="font-size:16px;padding:10px 18px">${t} <span class="pill ${dueList(k).length?"p-warn":"p-n"}">${dueList(k).length} due</span></button>`;
+  main.innerHTML = `<div class="panel"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">Vaccination &amp; deworming</h2><span class="spacer"></span>${tabBtn("vacc","💉 Vaccination")}${tabBtn("deworm","🪱 Deworming")}</div>
+    <div class="row" style="margin-bottom:8px"><input id="pvq" placeholder="Search horse (Arabic / English), ID, drug or note…" value="${esc(prevQ)}" style="max-width:380px">
+      <select id="pvf" style="max-width:280px">${[["horses",`All horses (${prevHorses().length}) – last ${KLAB[kind].toLowerCase()}`],["all","All records"],["due","Due & overdue"],["latest","Latest per horse & drug"]].map(([v,t]) => `<option value="${v}"${v===prevF?" selected":""}>${esc(t)}</option>`).join("")}</select>
+      <span class="spacer"></span><button id="pvXlsx">⬇ Excel</button><button id="pvCsv">⬇ CSV</button><button id="pvBulk">+ Add for many horses</button><button class="pri" id="pvAdd">+ Add ${KLAB[kind].toLowerCase()}</button></div>
     <p class="small muted" id="pvcount"></p>
-    <div class="tbl"><table><thead><tr><th>Horse</th><th>ID</th><th>Name of drug</th><th>Given date</th><th>Next date</th><th>Status</th><th>Note</th><th></th></tr></thead><tbody id="pvbody"></tbody></table></div>
-    <p class="small muted">“Due” means the next date is within ${remindDays()} days (change this in Settings). When you give the same drug again, the older record shows “Done”.</p></div>`;
-  let shown = [];
+    <div class="tbl"><table><thead id="pvhead"></thead><tbody id="pvbody"></tbody></table></div>
+    <p class="small muted">“Due” means the next date is within ${remindDays()} days (change this in Settings). When you give the same drug again, the older record shows “Done”. All horses from the Horses list are shown, also those with no record yet.</p></div>`;
+  let shown = [], mode = prevF;
   const draw = () => {
-    const q = prevQ.trim().toLowerCase(), latest = latestPrev(), latestIds = new Set([...latest.values()].map(r => r._id));
-    shown = S.preventive.filter(r => r.kind === kind && (!q || [r.name, r.pid, r.drug, r.note].some(x => String(x||"").toLowerCase().includes(q))) &&
-      (prevF === "all" || (prevF === "latest" && latestIds.has(r._id)) || (prevF === "due" && latestIds.has(r._id) && r.next && daysUntil(r.next) <= remindDays())))
-      .sort((a,b) => prevF === "due" ? (a.next||"").localeCompare(b.next||"") : (b.given||"").localeCompare(a.given||""));
-    $("#pvcount").textContent = `${shown.length} record(s)` + (q ? ` matching “${prevQ}”` : "");
-    $("#pvbody").innerHTML = shown.map(r => { const st = prevStatus(r, latest);
-      return `<tr class="${st[1]==="p-bad"?"bad":""}"><td><button class="linkbtn" data-pat="1" data-pid="${esc(r.pid||"")}" data-pname="${esc(r.name||"")}">${esc(r.name || r.pid || "(no name)")}</button></td><td>${esc(r.pid||"")}</td><td><b>${esc(r.drug||"")}</b></td>
-        <td>${esc(r.given ? dshow(r.given) : "")}</td><td>${esc(r.next ? dshow(r.next) : "")}</td><td><span class="pill ${st[1]}">${esc(st[0])}</span></td><td class="small pre">${esc(r.note||"")}</td>
-        <td style="white-space:nowrap"><button class="small" data-pe="${esc(r._id)}">Edit</button> <button class="small" data-pr="${esc(r._id)}" title="Record the next dose">↻ Repeat</button></td></tr>`; }).join("") || `<tr><td colspan="8" class="muted">No records.</td></tr>`;
+    const q = prevQ.trim().toLowerCase(), latest = latestPrev(), latestIds = new Set([...latest.values()].map(r => r._id)); mode = prevF;
+    if (mode === "horses") {
+      const H = prevHorses().filter(h => !q || [h.name, h.nameEn, h.pid, h.cat, ...prevOf(h, kind).map(r => r.drug)].some(x => hk(x).includes(q)));
+      shown = H.map(h => { const rs = prevOf(h, kind); return {h, r:rs[0] || null, n:rs.length}; });
+      $("#pvhead").innerHTML = `<tr><th>No.</th><th>Horse</th><th>ID</th><th>Category</th><th>Last ${KLAB[kind].toLowerCase()}</th><th>Given date</th><th>Next date</th><th>Status</th><th class="num">Records</th><th></th></tr>`;
+      $("#pvcount").textContent = `${shown.length} horse(s) · ${shown.filter(x => !x.r).length} with no ${KLAB[kind].toLowerCase()} recorded`;
+      $("#pvbody").innerHTML = shown.map(({h, r, n}, i) => { const st = r ? prevStatus(r, latest) : ["No record","p-n"];
+        return `<tr class="${st[1]==="p-bad"?"bad":""}"><td>${esc(h.listNo)}</td><td><button class="linkbtn" data-pat="1" data-pid="${esc(h.pid)}" data-pname="${esc(h.name)}"><b class="ar">${esc(h.name)}</b></button>${h.nameEn && h.nameEn !== h.name ? `<div class="small muted">${esc(h.nameEn)}</div>` : ""}</td><td>${esc(h.pid)}</td><td class="small">${esc(h.cat)}</td>
+          <td>${r ? `<b>${esc(r.drug||"")}</b>` : '<span class="muted">–</span>'}</td><td>${esc(r && r.given ? dshow(r.given) : "")}</td><td>${esc(r && r.next ? dshow(r.next) : "")}</td><td><span class="pill ${st[1]}">${esc(st[0])}</span></td><td class="num">${n||""}</td>
+          <td style="white-space:nowrap"><button class="small" data-hadd="${i}">+ Add</button>${r ? ` <button class="small" data-pr="${esc(r._id)}" title="Record the next dose">↻ Repeat</button>` : ""}</td></tr>`; }).join("") || `<tr><td colspan="10" class="muted">No horses – add them in the Horses tab.</td></tr>`;
+      $("#pvbody").querySelectorAll("[data-hadd]").forEach(b => b.onclick = () => { const h = shown[+b.dataset.hadd].h; editPrev(kind, null, {name:h.name, pid:h.pid, given:today()}); });
+    } else {
+      shown = S.preventive.filter(r => r.kind === kind && (!q || [r.name, r.pid, r.drug, r.note, ...(horseRec(r) ? [horseRec(r).name, horseRec(r).nameEn] : [])].some(x => String(x||"").toLowerCase().includes(q))) &&
+        (prevF === "all" || (prevF === "latest" && latestIds.has(r._id)) || (prevF === "due" && latestIds.has(r._id) && r.next && daysUntil(r.next) <= remindDays())))
+        .sort((a,b) => prevF === "due" ? (a.next||"").localeCompare(b.next||"") : (b.given||"").localeCompare(a.given||""));
+      $("#pvhead").innerHTML = `<tr><th>Horse</th><th>ID</th><th>Name of drug</th><th>Given date</th><th>Next date</th><th>Status</th><th>Note</th><th></th></tr>`;
+      $("#pvcount").textContent = `${shown.length} record(s)` + (q ? ` matching “${prevQ}”` : "");
+      $("#pvbody").innerHTML = shown.map(r => { const st = prevStatus(r, latest);
+        return `<tr class="${st[1]==="p-bad"?"bad":""}"><td><button class="linkbtn" data-pat="1" data-pid="${esc(r.pid||"")}" data-pname="${esc(r.name||"")}">${esc(r.name || r.pid || "(no name)")}</button></td><td>${esc(r.pid||"")}</td><td><b>${esc(r.drug||"")}</b></td>
+          <td>${esc(r.given ? dshow(r.given) : "")}</td><td>${esc(r.next ? dshow(r.next) : "")}</td><td><span class="pill ${st[1]}">${esc(st[0])}</span></td><td class="small pre">${esc(r.note||"")}</td>
+          <td style="white-space:nowrap"><button class="small" data-pe="${esc(r._id)}">Edit</button> <button class="small" data-pr="${esc(r._id)}" title="Record the next dose">↻ Repeat</button></td></tr>`; }).join("") || `<tr><td colspan="8" class="muted">No records.</td></tr>`;
+      $("#pvbody").querySelectorAll("[data-pe]").forEach(b => b.onclick = () => editPrev(kind, S.preventive.find(r => r._id === b.dataset.pe)));
+    }
     bindPat($("#pvbody"));
-    $("#pvbody").querySelectorAll("[data-pe]").forEach(b => b.onclick = () => editPrev(kind, S.preventive.find(r => r._id === b.dataset.pe)));
     $("#pvbody").querySelectorAll("[data-pr]").forEach(b => b.onclick = () => { const r = S.preventive.find(x => x._id === b.dataset.pr); if (r) editPrev(kind, null, {name:r.name, pid:r.pid, drug:r.drug, given:today()}); });
   };
+  main.querySelectorAll("[data-pk]").forEach(b => b.onclick = () => { histMode = b.dataset.pk; render(true); });
   $("#pvq").addEventListener("input", e => { prevQ = e.target.value; draw(); });
   $("#pvf").onchange = e => { prevF = e.target.value; draw(); };
   $("#pvAdd").onclick = () => editPrev(kind, null);
-  const rows = () => [["Horse","ID","Name of drug","Given date","Next date","Status","Note"], ...shown.map(r => [r.name||"", r.pid||"", r.drug||"", r.given||"", r.next||"", prevStatus(r)[0], r.note||""])];
+  $("#pvBulk").onclick = () => editPrevBulk(kind);
+  const rows = () => mode === "horses"
+    ? [["No.","Horse","Name (English)","ID","Category",`Last ${KLAB[kind].toLowerCase()}`,"Given date","Next date","Status","Records"], ...shown.map(({h, r, n}) => [h.listNo, h.name, h.nameEn, h.pid, h.cat, r ? r.drug||"" : "", r ? r.given||"" : "", r ? r.next||"" : "", r ? prevStatus(r)[0] : "No record", n])]
+    : [["Horse","ID","Name of drug","Given date","Next date","Status","Note"], ...shown.map(r => [r.name||"", r.pid||"", r.drug||"", r.given||"", r.next||"", prevStatus(r)[0], r.note||""])];
   $("#pvXlsx").onclick = () => saveFile(`${kind === "vacc" ? "vaccination" : "deworming"}_${today()}.xlsx`, makeXlsx([{name:KLAB[kind], rows:rows()}]));
   $("#pvCsv").onclick = () => saveFile(`${kind === "vacc" ? "vaccination" : "deworming"}_${today()}.csv`, toCSV(rows()));
-  bindHistSel(); draw();
+  draw();
+}
+// one vaccination / deworming for many horses at once (same drug and date)
+function editPrevBulk(kind){
+  const H = prevHorses();
+  const re = kind === "vacc" ? /vacc|tetan|influenza|rabies|strangles|herpes|ehv|wnv|encephal/i : /anthelm|dewor|worm|ivermect|fenbend|pyrantel|praziq|moxidect|abamect|oxibend|eqvalan/i;
+  const drugs = [...new Set([...S.preventive.filter(p => p.kind === kind).map(p => p.drug), ...S.meds.filter(m => re.test([m.type, m.name, m.function, m.indication].join(" "))).map(m => m.name)].filter(Boolean))].sort();
+  const cats = [...new Set(H.map(h => h.cat).filter(Boolean))];
+  modal(`<h2>${kind === "vacc" ? "💉 Vaccination" : "🪱 Deworming"} – many horses at once</h2>
+    <div class="grid g4"><label style="grid-column:span 2">Name of drug${kind === "vacc" ? " / vaccine" : ""}<input id="pb_drug" list="pb_drugs" autocomplete="off"></label>
+      <label>Given date<input id="pb_given" type="date" value="${today()}"></label><label>Next date<input id="pb_next" type="date"></label>
+      <div class="row small" style="grid-column:1/-1;gap:6px">Next date = given date + ${[1,2,3,6,12].map(n => `<button type="button" class="small" data-plus="${n}">${n} mo</button>`).join("")}</div>
+      <label style="grid-column:1/-1">Note (same for all)<input id="pb_note" placeholder="Batch no., dose, route…"></label></div>
+    <datalist id="pb_drugs">${drugs.map(n => `<option value="${esc(n)}">`).join("")}</datalist>
+    <div class="row" style="margin:10px 0 6px"><b>Horses</b> <span class="small muted" id="pb_n"></span><span class="spacer"></span><input id="pb_q" placeholder="Filter…" style="max-width:160px">
+      <select id="pb_cat" style="max-width:220px"><option value="">All categories</option>${cats.map(c => `<option>${esc(c)}</option>`).join("")}</select>
+      <button type="button" class="small" id="pb_all">Select shown</button><button type="button" class="small" id="pb_none">Clear</button></div>
+    <div id="pb_list" style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 10px">
+      ${H.map((h, i) => `<label class="ckl" data-i="${i}" data-txt="${esc([h.name, h.nameEn, h.pid, h.cat].join(" ").toLowerCase())}" data-cat="${esc(h.cat)}"><input type="checkbox" class="pb_h" value="${i}"> <span class="ar">${esc(h.name)}</span>${h.nameEn && h.nameEn !== h.name ? ` <span class="small muted">${esc(h.nameEn)}</span>` : ""}</label>`).join("") || '<span class="muted">No horses – add them in the Horses tab.</span>'}</div>
+    <div class="row" style="margin-top:12px"><span class="spacer"></span><button data-act="close">Cancel</button><button class="pri" data-act="save">Save for selected horses</button></div>`, async (act, close) => {
+    if (act === "close") return close();
+    if (act !== "save") return;
+    const bg = [...document.querySelectorAll(".modal-bg")].pop(), q = sel => bg.querySelector(sel);
+    const sel = [...bg.querySelectorAll(".pb_h:checked")].map(c => H[+c.value]);
+    const d = {kind, drug:q("#pb_drug").value.trim(), given:q("#pb_given").value, next:q("#pb_next").value, note:q("#pb_note").value.trim()};
+    if (!d.drug) { toast("Type the name of the drug."); return; }
+    if (!sel.length) { toast("Tick at least one horse."); return; }
+    if (d.next && d.given && d.next < d.given) { toast("The next date is before the given date."); return; }
+    confirmBox(`Save ${KLAB[kind].toLowerCase()} “${d.drug}” (given ${d.given ? dshow(d.given) : "–"}${d.next ? ", next " + dshow(d.next) : ""}) for ${sel.length} horse(s)?`, async () => {
+      for (const h of sel) { const rec = Object.assign({}, d, {name:h.name, pid:h.pid}); const ref = db.collection("preventive").doc();
+        await W(() => ref.set(Object.assign({}, rec, {at:new Date().toISOString()}))); if (rec.given) await linkPrev(ref.id, rec); }
+      close(); toast(`Saved for ${sel.length} horse(s).`, 4000);
+    });
+  });
+  const bg = [...document.querySelectorAll(".modal-bg")].pop(), q = sel => bg.querySelector(sel);
+  const cnt = () => { q("#pb_n").textContent = `${bg.querySelectorAll(".pb_h:checked").length} of ${H.length} ticked`; };
+  const filt = () => { const t = q("#pb_q").value.trim().toLowerCase(), c = q("#pb_cat").value;
+    bg.querySelectorAll("#pb_list [data-i]").forEach(l => { l.hidden = (t && !l.dataset.txt.includes(t)) || (c && l.dataset.cat !== c); }); };
+  q("#pb_q").addEventListener("input", filt); q("#pb_cat").onchange = filt;
+  q("#pb_all").onclick = () => { bg.querySelectorAll("#pb_list [data-i]").forEach(l => { if (!l.hidden) l.querySelector("input").checked = true; }); cnt(); };
+  q("#pb_none").onclick = () => { bg.querySelectorAll(".pb_h").forEach(c => c.checked = false); cnt(); };
+  bg.querySelectorAll(".pb_h").forEach(c => c.onchange = cnt);
+  bg.querySelectorAll("[data-plus]").forEach(b => b.onclick = () => { q("#pb_next").value = addMonths(q("#pb_given").value || today(), +b.dataset.plus); });
+  cnt();
 }
 function editPrev(kind, r, preset){
   const isNew = !r; r = r || Object.assign({given:today(), next:"", drug:"", note:"", pid:"", name:""}, preset || {});
-  const names = [...new Set([...S.visits.map(v => v.name), ...S.preventive.map(p => p.name)].filter(Boolean))].sort();
+  const names = [...new Set([...(S.horses || []).flatMap(h => [h.name, h.nameEn]), ...S.visits.map(v => v.name), ...S.preventive.map(p => p.name)].filter(Boolean))].sort();
   const re = kind === "vacc" ? /vacc|tetan|influenza|rabies|strangles|herpes|ehv|wnv|encephal/i : /anthelm|dewor|worm|ivermect|fenbend|pyrantel|praziq|moxidect|abamect|oxibend|eqvalan/i;
   const drugs = [...new Set([...S.preventive.filter(p => p.kind === kind).map(p => p.drug), ...S.meds.filter(m => re.test([m.type, m.name, m.function, m.indication].join(" "))).map(m => m.name)].filter(Boolean))].sort();
   modal(`<h2>${isNew ? "Add" : "Edit"} ${KLAB[kind].toLowerCase()}</h2>
@@ -1416,6 +1486,7 @@ function editPrev(kind, r, preset){
   const bg = [...document.querySelectorAll(".modal-bg")].pop();
   bg.querySelectorAll("[data-plus]").forEach(b => b.onclick = () => { bg.querySelector("#pr_next").value = addMonths(bg.querySelector("#pr_given").value || today(), +b.dataset.plus); });
   bg.querySelector("#pr_name").addEventListener("change", e => { const pid = bg.querySelector("#pr_pid"); if (pid.value) return; const nm = e.target.value.trim().toLowerCase();
+    const hr = horseRec({name:e.target.value.trim()}); if (hr && hr.pid) { pid.value = hr.pid; return; }
     const v = [...S.visits, ...S.preventive].find(x => (x.name||"").trim().toLowerCase() === nm && x.pid); if (v) pid.value = v.pid; });
 }
 function patPrev(){
@@ -1462,7 +1533,7 @@ function drawNotif(){
   el.querySelectorAll("[data-ns]").forEach(b => b.onclick = () => { const x = S.stock.find(y => y._id === b.dataset.ns); if (!x) return; stockG = "all"; stockF = "all"; stockQ = x.item || ""; notifOpen = ""; drawNotif(); if (location.hash === "#stock") render(true); else location.hash = "#stock"; });
   el.querySelectorAll("[data-np]").forEach(b => b.onclick = () => { const r = S.preventive.find(y => y._id === b.dataset.np); if (r) { notifOpen = ""; drawNotif(); openPatient(r.pid, r.name); } });
   el.querySelectorAll("[data-nnote]").forEach(b => b.onclick = () => { notifOpen = ""; drawNotif(); editClinicNote(b.dataset.nnote); });
-  el.querySelectorAll("[data-nall]").forEach(b => b.onclick = () => { if (b.dataset.nall === "notes") { notifOpen = ""; drawNotif(); location.hash = "#notes"; return; } histMode = b.dataset.nall; prevF = "due"; notifOpen = ""; drawNotif(); if (location.hash === "#history") render(true); else location.hash = "#history"; });
+  el.querySelectorAll("[data-nall]").forEach(b => b.onclick = () => { if (b.dataset.nall === "notes") { notifOpen = ""; drawNotif(); location.hash = "#notes"; return; } histMode = b.dataset.nall; prevF = "due"; notifOpen = ""; drawNotif(); if (location.hash === "#vaccdew") render(true); else location.hash = "#vaccdew"; });
 }
 
 /* ---------------- shared helpers: horses, links ---------------- */
@@ -2003,8 +2074,7 @@ function visitCard(v, compact){
   ${v.rx || v.auto !== "prev" ? `<div>Rx / Treatment</div><div class="pre">${esc(v.rx||"–")}</div>` : ""}${linkedPrev(v).length ? `<div>Vaccination / deworming</div><div class="pre">${esc(linkedPrev(v).map(prevLine).join("\n"))}</div>` : ""}${v.advice?`<div>Advice</div><div class="pre">${esc(v.advice)}</div>`:""}${!compact&&v.notes?`<div>Notes</div><div class="pre">${esc(v.notes)}</div>`:""}</div></div>`;
 }
 function renderHistory(main){
-  if (histMode !== "visits") return renderPrevList(main);
-  main.innerHTML = `<div class="panel"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">History &amp; search</h2>${histSel()}</div>
+  main.innerHTML = `<div class="panel"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">History &amp; search</h2><span class="spacer"></span><a href="#vaccdew">Vaccination &amp; deworming →</a></div>
     <div class="row"><input id="hq" placeholder="Search by horse name, ID, T/D or medicine…" value="${esc(histQ)}" style="max-width:520px"><span class="spacer"></span><button id="btnAddPast">+ Add a past record</button></div>
     <p class="small muted" id="hcount"></p><p class="small muted">Tip: click a horse's name to open its full record – all visits on one page, with print, PDF, notes, photos and videos.</p><div id="hlist"></div></div>`;
   const draw = () => {
@@ -2017,7 +2087,6 @@ function renderHistory(main){
   };
   $("#hq").addEventListener("input", e => { histQ = e.target.value; draw(); });
   $("#btnAddPast").onclick = () => editVisit(null);
-  bindHistSel();
   draw();
 }
 function openVisit(id){
@@ -2522,7 +2591,7 @@ async function bindHfLists(){
 function renderSettings(main){
   const st = ST(), l = L();
   const ta = (k, lab) => `<label>${lab} (one per line)<textarea id="ls_${k}" rows="6">${esc((l[k]||[]).join("\n"))}</textarea></label>`;
-  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v10 · 16 Nov 2026</span></div><div class="grid g4">
+  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v11 · 16 Nov 2026</span></div><div class="grid g4">
     <label>Clinic / unit name<input id="st_clinic" value="${esc(st.clinic)}"></label><label>Veterinarian (printed)<input id="st_vet" value="${esc(st.vet)}"></label>
     <label>Max IM volume per site (ml)<input id="st_imMax" type="number" value="${esc(st.imMax)}"></label><label>Expiry warning (days)<input id="st_expiryDays" type="number" value="${esc(st.expiryDays)}"></label><label>Vaccination / deworming reminder (days before)<input id="st_remindDays" type="number" value="${esc(st.remindDays ?? 14)}"></label>
     <label>Next vaccination after (months)<input id="st_vaccMonths" type="number" min="0" value="${esc(st.vaccMonths ?? 12)}"></label><label>Next deworming after (months)<input id="st_dewormMonths" type="number" min="0" value="${esc(st.dewormMonths ?? 3)}"></label></div>

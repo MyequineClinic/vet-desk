@@ -53,6 +53,7 @@
   [hidden]{display:none!important}
   .listbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:8px 14px}
   .listbar button{background:#d97706;color:#fff;border:0;border-radius:4px;padding:8px 14px;font-weight:bold;cursor:pointer}
+  [data-hdr][contenteditable="true"]{outline:2px dashed #f59e0b;outline-offset:3px;background:#fffbeb;cursor:text}
   .listbar .ver{margin-inline-start:auto;font-size:12px;color:#92400e}
   #fhint{position:absolute;z-index:9999;background:#fffbe6;border:2px solid #e5b400;border-radius:6px;padding:7px 9px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.25);max-width:420px;display:flex;gap:8px;align-items:center}
   #fhint button{padding:3px 10px;border:0;border-radius:4px;background:#16a34a;color:#fff;font-weight:bold;cursor:pointer}
@@ -100,7 +101,6 @@
   <input id="pick" list="horseList" placeholder="Patient ID or Name / رقم أو اسم الحصان">
   <datalist id="horseList"></datalist>
   <button class="b-load" id="btnLoad">⟳ Collect from site / جمع البيانات</button>
-  <button class="b-save" id="btnSave">💾 Save file / حفظ</button>
   <button class="b-formx" id="btnFormX">⬇ Excel (form layout) / تحميل الملف</button>
   <button class="b-imp" id="btnImport">📄 Import horse list / استيراد الكشف</button><input type="file" id="impFile" accept=".xlsx,.xls" hidden>
   <button class="b-rep" id="btnReports">📥 Reports / التقارير</button>
@@ -115,7 +115,8 @@
   <b>⚙ Dropdown lists / القوائم المنسدلة</b>
   <span class="hint" style="padding:0">Edit the choices in every dropdown of this file – one per line / عدّل خيارات كل القوائم</span>
   <button id="barLists">✏ Edit all dropdown lists / تعديل كل القوائم</button>
-  <span class="ver">Horse File v10 · 16 Nov 2026</span>
+  <button id="barHdr">✏ Edit heading (name &amp; date) / تعديل العنوان</button>
+  <span class="ver">Horse File v11 · 16 Nov 2026</span>
 </div>
 
 <div class="modal noprint" id="repModal"><div class="box">
@@ -167,9 +168,13 @@
 <div class="page lv" id="listView" hidden></div>
 
 <div class="page" id="form">
-  <div class="head"><span>Kuwait Army Equestrian Team</span><span>مديرية الاتحاد الرياضي العسكري</span></div>
-  <h1>الملف الشامل للخيل - مع تاريخ التحذية</h1>
-  <div class="sub">Kuwait Army Equestrian Team - Comprehensive File + Tahdhiya (Shoeing) Date - <span id="yr">2026</span></div>
+  <div class="head"><span data-hdr="org1">Kuwait Army Equestrian Team</span><span data-hdr="org2">مديرية الاتحاد الرياضي العسكري</span></div>
+  <h1 data-hdr="title">الملف الشامل للخيل - مع تاريخ التحذية</h1>
+  <div class="sub" data-hdr="sub">Kuwait Army Equestrian Team - Comprehensive File + Tahdhiya (Shoeing) Date - 2026</div>
+  <div class="noprint" id="hdrBar" hidden style="text-align:center;margin:6px 0 10px"><span class="hint" style="padding:0">Click on the heading lines above and type your changes / اضغط على العنوان وعدّل</span><br>
+    <button class="b-save" id="hdrSave" style="padding:7px 14px;border:0;border-radius:4px;font-weight:bold;cursor:pointer">💾 Save heading / حفظ العنوان</button>
+    <button id="hdrReset" style="padding:7px 14px;border:0;border-radius:4px;cursor:pointer">Default / الافتراضي</button>
+    <button id="hdrCancel" style="padding:7px 14px;border:0;border-radius:4px;cursor:pointer">Cancel / إلغاء</button></div>
 
   <section class="r"><h2>A. Identity / الهوية</h2>
     <div class="grid">
@@ -306,7 +311,6 @@ const SETTINGS = {
 const $ = s => document.querySelector(s);
 const status = t => $("#status").textContent = t;
 const today = () => new Date().toISOString().slice(0,10);
-$("#yr").textContent = new Date().getFullYear();
 $("#fileDate").value = today();
 
 /* ---------- tables ---------- */
@@ -820,7 +824,6 @@ async function downloadList(){
 $("#openGo").onclick=()=>findAndOffer($("#openQ").value);
 $("#openQ").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); findAndOffer($("#openQ").value); } });
 $("#btnLoad").onclick=()=>{ $("#openQ").value=$("#pick").value; if(LIST_ON) hideList(); window.scrollTo({top:0}); findAndOffer($("#pick").value); };
-$("#btnSave").onclick=()=>saveFile("final");
 $("#btnSaveB").onclick=()=>saveFile("final");
 $("#btnDraftB").onclick=()=>saveFile("draft");
 $("#btnPrintB").onclick=()=>window.print();
@@ -1193,6 +1196,30 @@ $("#lsSave").onclick=async()=>{
   }catch(e){ alert("Could not save the lists / تعذر الحفظ: "+e.message); }
 };
 await loadLists();
+
+/* ---------- editable heading (organisation names, title, date line) – saved for the whole site ---------- */
+const HDR_DEF={org1:"Kuwait Army Equestrian Team",org2:"مديرية الاتحاد الرياضي العسكري",title:"الملف الشامل للخيل - مع تاريخ التحذية",
+  sub:`Kuwait Army Equestrian Team - Comprehensive File + Tahdhiya (Shoeing) Date - ${new Date().getFullYear()}`};
+let HDR={...HDR_DEF};
+const hdrEls=()=>[...document.querySelectorAll("#form [data-hdr]")];
+function applyHdr(){ hdrEls().forEach(el=>{ el.textContent=HDR[el.dataset.hdr]||HDR_DEF[el.dataset.hdr]; }); }
+async function loadHdr(){
+  try{ if(ONLINE){ const d=await db.collection("config").doc("hfHeader").get(); if(d.exists) HDR={...HDR_DEF,...d.data()}; }
+       else { const h=LS.get("mec_hfheader"); if(h&&h.title) HDR={...HDR_DEF,...h}; } }catch(e){ console.warn("heading",e); }
+  applyHdr();
+}
+function hdrEdit(on){ hdrEls().forEach(el=>{ el.contentEditable=on?"true":"false"; }); $("#hdrBar").hidden=!on; if(on){ hdrEls()[0].focus(); window.scrollTo({top:$("#form").offsetTop-10,behavior:"smooth"}); } }
+$("#barHdr").onclick=()=>{ if(LIST_ON) hideList(); hdrEdit(true); };
+$("#hdrCancel").onclick=()=>{ applyHdr(); hdrEdit(false); };
+$("#hdrReset").onclick=()=>{ hdrEls().forEach(el=>{ el.textContent=HDR_DEF[el.dataset.hdr]; }); };
+$("#hdrSave").onclick=async()=>{
+  const h={}; hdrEls().forEach(el=>{ h[el.dataset.hdr]=el.textContent.replace(/\s+/g," ").trim()||HDR_DEF[el.dataset.hdr]; });
+  try{ if(ONLINE) await db.collection("config").doc("hfHeader").set({...h,updatedAt:new Date().toISOString()}); else LS.set("mec_hfheader",h);
+    HDR={...HDR_DEF,...h}; applyHdr(); hdrEdit(false); status("Heading saved / تم حفظ العنوان");
+  }catch(e){ alert("Could not save the heading / تعذر الحفظ: "+e.message); }
+};
+hdrEls().forEach(el=>el.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); } }));
+await loadHdr();
 
 if("serviceWorker" in navigator && location.protocol==="https:"){ try{ navigator.serviceWorker.register("sw.js").then(r=>r.update()).catch(()=>{}); }catch(e){} }
 await checkSeed();
