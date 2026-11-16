@@ -51,7 +51,7 @@
   .box button{padding:8px 12px;border:0;border-radius:4px;cursor:pointer;font-weight:bold}
   .b-rep{background:#8b5cf6;color:#fff}.b-imp{background:#0ea5e9;color:#fff}.b-formx{background:#14b8a6;color:#fff}
   [hidden]{display:none!important}
-  #fhint{position:absolute;z-index:9999;background:#fffbe6;border:1px solid #e5b400;border-radius:6px;padding:6px 8px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.2);max-width:360px;display:flex;gap:8px;align-items:center}
+  #fhint{position:absolute;z-index:9999;background:#fffbe6;border:2px solid #e5b400;border-radius:6px;padding:7px 9px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.25);max-width:420px;display:flex;gap:8px;align-items:center}
   #fhint button{padding:3px 10px;border:0;border-radius:4px;background:#16a34a;color:#fff;font-weight:bold;cursor:pointer}
   /* v3 – English and Arabic side by side */
   .bi:not(th):not(td){display:flex;justify-content:space-between;align-items:baseline;gap:8px}
@@ -104,6 +104,7 @@
   <button class="b-print" onclick="window.print()">🖨 Print / طباعة</button>
   <button class="b-list" id="btnList">📋 Horse List / كشف الخيل</button>
   <button class="b-recs" id="btnRecs">📂 Saved records / السجلات</button>
+  <button class="b-formx" id="btnLists">⚙ Settings &amp; lists / الإعدادات</button>
   <button class="b-clear" id="btnClear">New / جديد</button>
   <span id="status">Manual mode / إدخال يدوي</span>
 </div>
@@ -130,6 +131,13 @@
   <div class="row"><button id="recClose">Close / إغلاق</button></div>
 </div></div>
 
+<div class="modal noprint" id="lsModal"><div class="box wide">
+  <h3>Settings &amp; lists – dropdown menus / الإعدادات والقوائم</h3>
+  <p class="hint" style="padding:0 0 6px">One choice per line. Saved for the whole site and used straight away in the Horse File and the horse editor. / خيار واحد في كل سطر</p>
+  <div class="grid" id="lsGrid"></div>
+  <div class="row"><button class="b-save" id="lsSave">💾 Save lists / حفظ</button><button id="lsReset">Reset to default / الافتراضي</button><button id="lsClose">Close / إغلاق</button></div>
+</div></div>
+
 <div class="modal noprint" id="edModal"><div class="box wide">
   <h3 id="edTitle">Horse details / بيانات الحصان</h3>
   <div class="grid" id="edGrid" style="padding:6px 0"></div>
@@ -142,7 +150,8 @@
   <div class="row"><input id="openQ" list="horseList" placeholder="Patient ID or Name (Arabic or English) / رقم أو اسم الحصان">
     <button class="b-load" id="openGo">🔍 Find & import / بحث واستيراد</button>
     <button class="b-list" id="openList">📋 Horse List / كشف الخيل</button>
-    <button class="b-recs" id="openRecs">📂 Saved records / السجلات</button></div>
+    <button class="b-recs" id="openRecs">📂 Saved records / السجلات</button>
+    <button class="b-formx" id="openLists">⚙ Edit dropdown lists / تعديل القوائم</button></div>
   <div id="openRes"></div>
 </div>
 
@@ -167,7 +176,7 @@
       <div class="f"><label>Color / <span class="ar">اللون</span></label><input data-k="color"></div>
       <div class="f"><label>Rider / <span class="ar">الفارس</span></label><input data-k="rider"></div>
       <div class="f"><label>Source / <span class="ar">مصدر الخيل</span></label><input data-k="source" list="srcList"><datalist id="srcList"><option>مستوردة / Imported</option><option>انتاج الفروسية / Equestrian production</option><option>مهداة / Gifted</option></datalist></div>
-      <div class="f"><label>Category / <span class="ar">الفئة</span></label><input data-k="category"></div>
+      <div class="f"><label>Category / <span class="ar">الفئة</span></label><input data-k="category" list="catList"><datalist id="catList"><option>كبير بالسن / Aged – out of service</option><option>فريق القفز / Jumping team</option><option>مراسيم / Ceremonial</option><option>انتاج / Breeding</option><option>صغار – تدريب / Young – training</option><option>مدرسة الأطفال / Children's school</option></datalist></div>
       <div class="f span2"><label>List Notes / <span class="ar">الملاحظات (الكشف)</span></label><input data-k="listNotes"></div>
       <div class="f span4"><label>Purpose / <span class="ar">مهن الاستخدام</span></label><input data-k="purpose"></div>
     </div>
@@ -727,7 +736,12 @@ const ageOf=y=>{ const n=parseInt(y,10); return isNaN(n)||n<1900? null : new Dat
 const svcOf=y=>{ const a=ageOf(y); return a===null? SVC[3] : a>15? SVC[1] : a<5? SVC[2] : SVC[0]; };
 const catColor=c=>(CATS.find(x=>hk(x[0])===hk(c))||[])[1]||"";
 let LIST=[], LIST_ON=false;
+/* your own extra columns (added in the main site › Horses › + Add column) */
+let HCOLS=[];
+async function loadHCols(){ try{ if(ONLINE){ const d=await db.collection("config").doc("horseCols").get(); HCOLS=(d.exists&&d.data().cols)||[]; } else HCOLS=LS.get("mec_horsecols").cols||[]; }catch(e){ HCOLS=[]; } }
+const hcShow=(c,v)=>v===undefined||v===null?"":String(v);
 async function loadList(){
+  await loadHCols();
   const [L,recs]=await Promise.all([store.horses(), recStore.list().catch(()=>[])]);
   const n=x=>{ const v=parseFloat(x.listNo); return isNaN(v)?Infinity:v; };
   return L.map(e=>({key:e.key,...e.data,pid:e.data.pid||"",name:e.data.name||""}))
@@ -755,7 +769,8 @@ async function showList(){
       <input id="lvQ" placeholder="Filter / تصفية" style="flex:1 1 180px;padding:7px;border:1px solid #999;border-radius:4px"></div>
     ${LIST.length? "" : `<div class="found none" style="margin-top:10px">No horses on the site yet. Use <b>🔓 Load built-in horse list</b> at the top (passcode), or <b>📄 Import</b> with Horse_Records_2026.xlsx. / لا توجد خيول بعد</div>`}
     <h2 class="bilang">Horse List / كشف الخيل</h2>
-    <div style="overflow-x:auto"><table id="lvT"><thead><tr><th>No. / ت</th><th>Patient ID / رقم المريض</th><th>Horse Name / اسم الخيل</th><th>Name (English) / الاسم بالإنجليزية</th><th>Type / نوع الخيل</th><th>Birth Year / مواليد</th><th>Age / العمر</th><th>Source / المصدر</th><th>Notes / الملاحظات</th><th>Category / الفئة</th><th>Service Status / حالة الخدمة</th><th>Horse files / ملفات</th><th class="noprint"></th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="lvT"><thead><tr><th>No. / ت</th><th>Patient ID / رقم المريض</th><th>Horse Name / اسم الخيل</th><th>Name (English) / الاسم بالإنجليزية</th><th>Type / نوع الخيل</th><th>Birth Year / مواليد</th><th>Age / العمر</th><th>Source / المصدر</th><th>Notes / الملاحظات</th><th>Category / الفئة</th><th>Service Status / حالة الخدمة</th>${HCOLS.map(c=>`<th>${escT(c.label)}</th>`).join("")}<th>Horse files / ملفات</th><th class="noprint"></th></tr></thead><tbody></tbody></table></div>
+    <div class="rowx noprint" style="justify-content:center;margin:6px 0"><button class="b-save" id="lvAdd2">➕ Add horse / إضافة حصان</button></div>
     <p class="hint noprint" style="padding:0">Click a horse to open its comprehensive file. Age and service status are calculated from the birth year (${yr}). / اضغط على الحصان لفتح ملفه</p>
     <h2 class="bilang">Summary / ملخص الخيل</h2>
     <div class="sum">${sumTable("Category / الفئة",countBy(LIST,CATS.map(c=>c[0]),h=>h.category))}${sumTable("Type / نوع الخيل",countBy(LIST,TYPES,h=>h.sex))}
@@ -768,20 +783,20 @@ async function showList(){
       <li>Horses enter active service at 5 years of age. / <span class="ar">دخول الخيل بالخدمة الفعلية يبدأ في عمر 5 سنوات.</span></li>
       <li>Horses unfit for service are transferred to breeding only. / <span class="ar">الخيل الغير صالحة بدخول الخدمة يتم تحويلها لخيل الإنتاج فقط.</span></li></ul>`;
   const drawRows=()=>{ const q=hk($("#lvQ").value);
-    const L=LIST.filter(h=>!q||[h.listNo,h.pid,h.name,h.nameEn,h.sex,h.category,h.source,h.listNotes].some(x=>hk(x).includes(q)));
+    const L=LIST.filter(h=>!q||[h.listNo,h.pid,h.name,h.nameEn,h.sex,h.category,h.source,h.listNotes,...HCOLS.map(c=>h[c.key])].some(x=>hk(x).includes(q)));
     $("#lvT tbody").innerHTML=L.map(h=>{ const a=ageOf(h.birthYear), bg=catColor(h.category);
-      return `<tr data-k="${escT(h.key)}"${bg?` style="background:${bg}"`:""}><td>${escT(h.listNo||"")}</td><td>${escT(h.pid||"")}</td><td class="ar">${escT(h.name)}</td><td>${escT(h.nameEn||"")}</td><td>${escT(h.sex||"")}</td><td>${escT(h.birthYear||"")}</td><td>${a===null?"":a}</td><td>${escT(h.source||"")}</td><td>${escT(h.listNotes||"")}</td><td>${escT(h.category||"")}</td><td>${escT(svcOf(h.birthYear))}</td><td style="text-align:center">${h.nFiles||""}</td><td class="noprint"><button class="b-load" data-ed="${escT(h.key)}" style="padding:4px 8px">✏ Edit / تعديل</button></td></tr>`; }).join("");
+      return `<tr data-k="${escT(h.key)}"${bg?` style="background:${bg}"`:""}><td>${escT(h.listNo||"")}</td><td>${escT(h.pid||"")}</td><td class="ar">${escT(h.name)}</td><td>${escT(h.nameEn||"")}</td><td>${escT(h.sex||"")}</td><td>${escT(h.birthYear||"")}</td><td>${a===null?"":a}</td><td>${escT(h.source||"")}</td><td>${escT(h.listNotes||"")}</td><td>${escT(h.category||"")}</td><td>${escT(svcOf(h.birthYear))}</td>${HCOLS.map(c=>`<td>${escT(hcShow(c,h[c.key]))}</td>`).join("")}<td style="text-align:center">${h.nFiles||""}</td><td class="noprint"><button class="b-load" data-ed="${escT(h.key)}" style="padding:4px 8px">✏ Edit / تعديل</button></td></tr>`; }).join("");
     $("#lvT tbody").querySelectorAll("[data-ed]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); editHorse(LIST.find(x=>x.key===b.dataset.ed)); });
     $("#lvT tbody").querySelectorAll("tr").forEach(tr=>tr.onclick=()=>{ const h=LIST.find(x=>x.key===tr.dataset.k); hideList(); $("#openQ").value=h.name||h.pid; offer(h); window.scrollTo({top:0}); }); };
   bilingual(v); drawRows();
   $("#lvQ").oninput=drawRows; $("#lvBack").onclick=hideList; $("#lvImp").onclick=()=>$("#impFile").click();
-  $("#lvXl").onclick=downloadList; $("#lvAdd").onclick=()=>editHorse(null);
+  $("#lvXl").onclick=downloadList; $("#lvAdd").onclick=()=>editHorse(null); $("#lvAdd2").onclick=()=>editHorse(null);
 }
 function hideList(){ LIST_ON=false; $("#listView").hidden=true; $("#form").hidden=false; $("#actions").hidden=false; }
 async function downloadList(){
   const XLSX=await import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs");
-  const head=["No. / ت","Patient ID / رقم المريض","Horse Name / اسم الخيل","Name (English)","Type / نوع الخيل","Birth Year / مواليد الخيل","Age / العمر","Source / مصدر الخيل","Notes / الملاحظات","Category / الفئة","Service Status / حالة الخدمة","Horse files saved / ملفات محفوظة"];
-  const rows=LIST.map(h=>[h.listNo||"",h.pid||"",h.name,h.nameEn||"",h.sex||"",h.birthYear||"",ageOf(h.birthYear)??"",h.source||"",h.listNotes||"",h.category||"",svcOf(h.birthYear),h.nFiles||0]);
+  const head=["No. / ت","Patient ID / رقم المريض","Horse Name / اسم الخيل","Name (English)","Type / نوع الخيل","Birth Year / مواليد الخيل","Age / العمر","Source / مصدر الخيل","Notes / الملاحظات","Category / الفئة","Service Status / حالة الخدمة",...HCOLS.map(c=>c.label),"Horse files saved / ملفات محفوظة"];
+  const rows=LIST.map(h=>[h.listNo||"",h.pid||"",h.name,h.nameEn||"",h.sex||"",h.birthYear||"",ageOf(h.birthYear)??"",h.source||"",h.listNotes||"",h.category||"",svcOf(h.birthYear),...HCOLS.map(c=>hcShow(c,h[c.key])),h.nFiles||0]);
   const ws=XLSX.utils.aoa_to_sheet([["كشف بأسماء خيل ميدان الفروسية العسكري"],["Military Equestrian Field – Horse List – "+today()],[],head,...rows]);
   ws["!cols"]=head.map(()=>({wch:22}));
   const sum=[["Summary / ملخص الخيل"],[]];
@@ -1023,22 +1038,29 @@ async function checkSeed(){
 
 /* ---------- add / edit / delete a horse ---------- */
 const ED=[["listNo","No. / ت"],["pid","Patient ID / رقم المريض"],["name","Horse Name (Arabic) / اسم الخيل"],["nameEn","Name (English) / الاسم بالإنجليزية"],
-  ["sex","Type – Sex / نوع الخيل","dl:edTypes"],["birthYear","Birth Year / مواليد","number"],["breed","Breed / السلالة","dl:breedList"],["color","Color / اللون"],
-  ["source","Source / المصدر","dl:edSources"],["category","Category / الفئة","dl:edCats"],["listNotes","Notes / الملاحظات"],["rider","Rider / الفارس"],
+  ["sex","Type – Sex / نوع الخيل","dl:sexList"],["birthYear","Birth Year / مواليد","number"],["breed","Breed / السلالة","dl:breedList"],["color","Color / اللون"],
+  ["source","Source / المصدر","dl:srcList"],["category","Category / الفئة","dl:catList"],["listNotes","Notes / الملاحظات"],["rider","Rider / الفارس"],
   ["microchip","Microchip No. / رقم الشريحة"],["militaryNo","Military No. / الرقم العسكري"],["weightKg","Body weight (kg) / الوزن","number"],["weightDate","Weight date / تاريخ الوزن","date"]];
 let ED_KEY=null;
-function editHorse(h){
+async function editHorse(h){
+  await loadHCols();
   ED_KEY=h?h.key:null;
   $("#edTitle").textContent = h ? `Edit horse / تعديل: ${h.name||""} ${h.nameEn||""}` : "Add a new horse / إضافة حصان جديد";
   $("#edGrid").innerHTML = ED.map(([k,l,t])=>{ const dl=t&&t.startsWith("dl:")?t.slice(3):""; const ty=t&&!dl?t:"text";
     return `<div class="f${k==="listNotes"?" span2":""}"><label>${escT(l)}</label><input id="ed_${k}" type="${ty}"${dl?` list="${dl}"`:""} value="${escT(h&&h[k]!=null?h[k]:"")}"></div>`; }).join("")
-    + `<datalist id="edTypes">${TYPES.map(t=>`<option>${escT(t)}</option>`).join("")}</datalist><datalist id="edSources">${SOURCES.map(t=>`<option>${escT(t)}</option>`).join("")}</datalist><datalist id="edCats">${CATS.map(c=>`<option>${escT(c[0])}</option>`).join("")}</datalist>`;
+    ;
+  $("#edGrid").insertAdjacentHTML("beforeend",HCOLS.map(c=>{ const v=h&&h[c.key]!=null?h[c.key]:"";
+    const inp = c.type==="yesno" ? `<select id="edc_${c.key}">${["","Yes","No"].map(o=>`<option${o===v?" selected":""}>${o}</option>`).join("")}</select>`
+      : c.type==="select" ? `<select id="edc_${c.key}"><option></option>${[...new Set([...(c.opts||[]),v].filter(Boolean))].map(o=>`<option${o===v?" selected":""}>${escT(o)}</option>`).join("")}</select>`
+      : `<input id="edc_${c.key}" type="${c.type==="number"?"number":c.type==="date"?"date":"text"}" value="${escT(v)}">`;
+    return `<div class="f"><label>${escT(c.label)}</label>${inp}</div>`; }).join(""));
   $("#edGrid").querySelectorAll(".f > label").forEach(biSplit);
   $("#edDel").hidden=!h; $("#edModal").classList.add("show");
 }
 $("#edClose").onclick=()=>$("#edModal").classList.remove("show");
 $("#edSave").onclick=async()=>{
   const v={}; ED.forEach(([k])=>{ v[k]=$("#ed_"+k).value.trim(); });
+  HCOLS.forEach(c=>{ const el=$("#edc_"+c.key); if(el) v[c.key]=c.type==="number"&&el.value!==""?Number(el.value):el.value.trim(); });
   if(!v.name && !v.nameEn && !v.pid) return alert("Name or Patient ID is required / الاسم أو الرقم مطلوب");
   if(v.weightKg){ v.weightKg=Number(v.weightKg); if(!v.weightDate) v.weightDate=today(); v.weightMethod=v.weightMethod||"horse list"; } else delete v.weightKg;
   try{
@@ -1072,33 +1094,97 @@ $("#openQ").addEventListener("change",()=>findAndOffer($("#openQ").value));
 $("#pick").addEventListener("change",()=>{ $("#openQ").value=$("#pick").value; findAndOffer($("#pick").value); window.scrollTo({top:0}); });
 ['[data-k="name"]','[data-k="nameEn"]','[data-k="patientId"]'].forEach(sel=>{ const el=$(sel); if(el) el.addEventListener("change",()=>autoOffer(el.value)); });
 
-/* ---------- click into a field → the value saved on the site pops up with “Use” ---------- */
+/* ---------- hover over or click a field → the value saved anywhere on the site pops up with “Use” ---------- */
+let HINT_EL=null, HINT_T=null;
 function showHint(el,html,onUse){
-  let b=$("#fhint"); if(!b){ b=document.createElement("div"); b.id="fhint"; b.className="noprint"; document.body.appendChild(b); }
-  b.innerHTML=`<span>${html}</span>${onUse?'<button type="button">Use / استخدم</button>':""}`;
-  const r=el.getBoundingClientRect(); b.style.left=(r.left+scrollX)+"px"; b.style.top=(r.bottom+scrollY+4)+"px"; b.hidden=false;
-  const btn=b.querySelector("button"); if(btn) btn.onmousedown=e=>{ e.preventDefault(); onUse(); b.hidden=true; };
+  let b=$("#fhint");
+  if(!b){ b=document.createElement("div"); b.id="fhint"; b.className="noprint"; document.body.appendChild(b);
+    b.addEventListener("mouseenter",()=>clearTimeout(HINT_T)); b.addEventListener("mouseleave",()=>hideHintLater(6000)); }
+  clearTimeout(HINT_T); HINT_EL=el;
+  b.innerHTML=`<span>${html}</span>${onUse?'<button type="button">Use / استخدم</button>':""}`; b.hidden=false;
+  placeHint(b,el);
+  const btn=b.querySelector("button"); if(btn) btn.onmousedown=e=>{ e.preventDefault(); onUse(); hideHint(); };
 }
-const hideHint=()=>{ const b=$("#fhint"); if(b) b.hidden=true; };
+// beside the field (dropdowns open up or down, never sideways); no room beside → above or below, away from the dropdown
+function placeHint(b,el){
+  const r=el.getBoundingClientRect(), w=b.offsetWidth, h=b.offsetHeight, vw=document.documentElement.clientWidth, vh=innerHeight;
+  let left, top;
+  // a dropdown opens downwards when there is room below, otherwise upwards → put the pop-up on the other side
+  left=Math.min(Math.max(4,r.left),vw-w-4);
+  const below=vh-r.bottom, dropDown=(below>=280||below>=r.top);
+  top=dropDown? r.top-h-8 : r.bottom+8;
+  if(dropDown&&top<4) top=r.bottom+8;
+  b.style.left=(left+scrollX)+"px"; b.style.top=(top+scrollY)+"px";
+}
+function hideHint(){ clearTimeout(HINT_T); HINT_EL=null; const b=$("#fhint"); if(b) b.hidden=true; }
+function hideHintLater(ms){ clearTimeout(HINT_T); HINT_T=setTimeout(()=>{ if(HINT_EL && document.activeElement===HINT_EL) return; hideHint(); },ms); }
 async function hintSource(){
   if(LAST_F && LAST_H) return {f:LAST_F,h:LAST_H};
   const d=getForm(), q=d.patientId||d.name||d.nameEn; if(!q) return null;
-  const M=(await horseIndex([])).filter(h=>[h.pid,h.name,h.nameEn].some(x=>hk(x)===hk(q))); if(M.length!==1) return null;
+  const visitsAll=ONLINE? await store.all(SETTINGS.visits).catch(()=>[]) : [];
+  const M=(await horseIndex(visitsAll)).filter(h=>[h.pid,h.name,h.nameEn].some(x=>hk(x)===hk(q))); if(M.length!==1) return null;
   const g=await gather(M[0]); LAST_F=g.f; LAST_H=M[0]; return {f:g.f,h:M[0]};
 }
-document.addEventListener("focusin",async e=>{
-  const el=e.target; if(!el||!el.dataset||!(el.dataset.k||el.id==="manKg")||el.readOnly) return hideHint();
-  const src=await hintSource(); if(!src||document.activeElement!==el) return hideHint();
-  const d=getForm(); // only for the same horse as on the form
-  if((d.name||d.patientId||d.nameEn) && ![src.h.pid,src.h.name,src.h.nameEn].some(x=>x&&[d.name,d.patientId,d.nameEn].some(y=>hk(y)===hk(x)))) return hideHint();
-  let k=el.dataset.k, v=src.f[k];
-  if(el.id==="manKg"){ const w=src.f._weight; if(!w) return hideHint(); v=String(w.kg); }
-  if(v===undefined||v===null||String(v).trim()===""||String(el.value)===String(v)) return hideHint();
+const hintable=el=>el && el.dataset && (el.dataset.k||el.dataset.v||el.id==="manKg") && !el.readOnly && /INPUT|SELECT|TEXTAREA/.test(el.tagName);
+async function fieldHint(el){
+  if(!hintable(el)) return;
+  if(HINT_EL===el && !$("#fhint").hidden) return;
+  const src=await hintSource(); if(!src) return;
+  const d=getForm(); // only for the horse on the form
+  if((d.name||d.patientId||d.nameEn) && ![src.h.pid,src.h.name,src.h.nameEn].some(x=>x&&[d.name,d.patientId,d.nameEn].some(y=>hk(y)===hk(x)))) return;
+  let v, note="";
+  if(el.id==="manKg"){ const w=src.f._weight; if(!w) return; v=String(w.kg); note=` <small>(${escT(w.src)}${w.date?", "+escT(w.date):""})</small>`; }
+  else if(el.dataset.v){ v=src.f.vacc && src.f.vacc[el.dataset.v]; }
+  else { v=src.f[el.dataset.k]; if(el.dataset.k==="weightDate"&&src.f._weight) v=src.f._weight.date; }
+  if(v===undefined||v===null||String(v).trim()==="") return;
   const who=escT([src.h.name,src.h.nameEn].filter(Boolean).join(" / "));
-  showHint(el,`${who}: <b>${escT(v)}</b>${el.id==="manKg"&&src.f._weight?` <small>(${escT(src.f._weight.src)}${src.f._weight.date?", "+escT(src.f._weight.date):""})</small>`:""}`,()=>{
+  if(String(el.value)===String(v)){ showHint(el,`${who}: <b>${escT(v)}</b>${note} ✓ <small>same as saved</small>`,null); return; }
+  showHint(el,`<small>Saved on the site / محفوظ في الموقع</small><br>${who}: <b>${escT(v)}</b>${note}`,()=>{
+    if(el.tagName==="SELECT" && ![...el.options].some(o=>o.value===String(v))) el.add(new Option(v,v));
     el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); el.dispatchEvent(new Event("change",{bubbles:true})); calcWeight(); calcShoe(); calcVitals(); });
-},true);
-document.addEventListener("focusout",()=>setTimeout(()=>{ const a=document.activeElement; if(!a||!a.dataset||!(a.dataset.k||a.id==="manKg")) hideHint(); },150),true);
+}
+document.addEventListener("focusin",e=>{ if(hintable(e.target)) fieldHint(e.target); },true);
+setInterval(() => { if (HINT_EL && !document.body.contains(HINT_EL)) hideHint(); }, 800); // field redrawn → remove its pop-up
+document.addEventListener("mouseover",e=>{ const el=e.target.closest?e.target.closest("input,select,textarea"):null; if(hintable(el)) fieldHint(el); },true);
+document.addEventListener("mouseout",e=>{ if(HINT_EL && e.target===HINT_EL) hideHintLater(6000); },true);
+document.addEventListener("focusout",e=>{ if(HINT_EL && e.target===HINT_EL) hideHintLater(6000); },true);
+
+/* ---------- Settings & lists: edit the dropdown menus ---------- */
+const LISTS_DOC="hfLists";
+const LIST_DEFS=[...document.querySelectorAll("select[data-k]")].map(el=>({key:"sel:"+el.dataset.k,el,label:(el.closest(".f")?.querySelector("label .en")||el.closest(".f")?.querySelector("label"))?.textContent.trim()||el.dataset.k,
+    ar:el.closest(".f")?.querySelector("label .ar")?.textContent.trim()||""}))
+  .concat([["sexList","Sex / Type","الجنس / النوع"],["breedList","Breed","السلالة"],["srcList","Source","المصدر"],["catList","Category / purpose","الفئة"]]
+    .map(([id,l,ar])=>({key:"dl:"+id,el:document.getElementById(id),label:l,ar})).filter(x=>x.el));
+const optsOf=el=>[...el.querySelectorAll("option")].map(o=>o.value||o.textContent).filter(v=>v!=="");
+const LIST_DEFAULT=Object.fromEntries(LIST_DEFS.map(x=>[x.key,optsOf(x.el)]));
+let LISTS={};
+function applyLists(){
+  LIST_DEFS.forEach(x=>{ const arr=LISTS[x.key]; if(!Array.isArray(arr)) return;
+    if(x.key.startsWith("sel:")){ const cur=x.el.value; x.el.innerHTML='<option></option>'+arr.map(v=>`<option>${escT(v)}</option>`).join("");
+      if(cur && !arr.includes(cur)) x.el.add(new Option(cur,cur)); x.el.value=cur; }
+    else x.el.innerHTML=arr.map(v=>`<option>${escT(v)}</option>`).join(""); });
+}
+async function loadLists(){
+  try{ if(ONLINE){ const d=await db.collection("config").doc(LISTS_DOC).get(); LISTS=(d.exists&&d.data().lists)||{}; } else LISTS=LS.get("mec_hflists"); }catch(e){ console.warn("lists",e); LISTS={}; }
+  applyLists();
+}
+function showLists(){
+  $("#lsGrid").innerHTML=LIST_DEFS.map(x=>`<div class="f"><label class="bi"><span class="en">${escT(x.label)}</span><span class="ar">${escT(x.ar)}</span></label>
+    <textarea rows="6" data-l="${escT(x.key)}">${escT((LISTS[x.key]||LIST_DEFAULT[x.key]).join("\n"))}</textarea></div>`).join("");
+  $("#lsModal").classList.add("show");
+}
+$("#btnLists").onclick=showLists; $("#openLists").onclick=showLists;
+$("#lsClose").onclick=()=>$("#lsModal").classList.remove("show");
+$("#lsReset").onclick=()=>{ if(!confirm("Put all dropdown lists back to the original choices? / إرجاع القوائم للأصل؟")) return;
+  $("#lsGrid").querySelectorAll("[data-l]").forEach(t=>t.value=LIST_DEFAULT[t.dataset.l].join("\n")); };
+$("#lsSave").onclick=async()=>{
+  const L={}; $("#lsGrid").querySelectorAll("[data-l]").forEach(t=>{ L[t.dataset.l]=[...new Set(t.value.split("\n").map(v=>v.trim()).filter(Boolean))]; });
+  try{ if(ONLINE) await db.collection("config").doc(LISTS_DOC).set({lists:L,updatedAt:new Date().toISOString()}); else LS.set("mec_hflists",L);
+    LISTS=L; applyLists(); $("#lsModal").classList.remove("show"); status("Lists saved / تم حفظ القوائم");
+  }catch(e){ alert("Could not save the lists / تعذر الحفظ: "+e.message); }
+};
+await loadLists();
+
 await checkSeed();
 // open directly: horse-file.html?pid=..&name=..  (&recs=1 → saved records, ?list=1 → horse list)
 { const u=new URLSearchParams(location.search), pid=u.get("pid"), nm=u.get("name");

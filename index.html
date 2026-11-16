@@ -2065,6 +2065,55 @@ const horseAge = h => { const y = horseYear(h); return y === null ? null : new D
 const horseSvc = h => { const a = horseAge(h); return a === null ? "Not available" : a > 15 ? "Over age (>15)" : a < 5 ? "Below service age (<5)" : "Service age"; };
 const hcClass = c => (HCATS.find(x => hk(x[0]) === hk(c)) || [])[1] || "";
 const hDocId = s => String(s || "").replace(/[\/.#\[\]]/g, "-").trim().slice(0,120) || ("horse_" + Date.now());
+
+/* ---------- your own extra columns for every horse (saved in config/horseCols) ---------- */
+const HCOLS = () => ((S.horseCols && Array.isArray(S.horseCols.cols)) ? S.horseCols.cols : []);
+const HCOL_TYPES = [["text","Text"],["number","Number"],["date","Date"],["yesno","Yes / No"],["select","Dropdown (your choices)"]];
+const hcolShow = (c, v) => v === undefined || v === null ? "" : c.type === "date" && v ? dshow(v) : String(v);
+function hcolInput(c, id, v){
+  v = v ?? "";
+  if (c.type === "yesno") return `<select id="${id}">${["","Yes","No"].map(o => `<option${o===v?" selected":""}>${o}</option>`).join("")}</select>`;
+  if (c.type === "select") { const o = (c.opts || []).slice(); if (v && !o.includes(v)) o.push(v); return `<select id="${id}"><option></option>${o.map(x => `<option${x===v?" selected":""}>${esc(x)}</option>`).join("")}</select>`; }
+  return `<input id="${id}" type="${c.type === "number" ? "number" : c.type === "date" ? "date" : "text"}"${c.type==="number"?' step="any"':""} value="${esc(v)}">`;
+}
+const saveHorseCols = cols => W(() => db.doc("config/horseCols").set({cols, updatedAt:new Date().toISOString()}));
+function editHorseCol(i){
+  const cols = HCOLS().map(c => ({...c})), c = i >= 0 ? cols[i] : {label:"", type:"text", opts:[]};
+  modal(`<h2>${i >= 0 ? "Edit column – " + esc(c.label) : "Add a column for all horses"}</h2>
+    <div class="grid g2"><label>Column name<input id="hc_label" value="${esc(c.label)}" placeholder="e.g. Stable No., Passport No., Owner, Insurance date"></label>
+      <label>Type<select id="hc_type">${HCOL_TYPES.map(([v,t]) => `<option value="${v}"${v===c.type?" selected":""}>${t}</option>`).join("")}</select></label>
+      <label id="hc_optsL" style="grid-column:1/-1"${c.type==="select"?"":" hidden"}>Dropdown choices (one per line)<textarea id="hc_opts" rows="5">${esc((c.opts||[]).join("\n"))}</textarea></label></div>
+    <p class="small muted">The column appears for every horse – in the Horses table, the Edit form, the search, the Excel download and the Horse File's horse list. Fill it in with <b>Edit</b> on each horse.</p>
+    <div class="row" style="margin-top:12px"><span class="spacer"></span><button data-act="close">Cancel</button><button class="pri" data-act="save">${i >= 0 ? "Save" : "Add column"}</button></div>`, async (act, close) => {
+    if (act === "close") return close();
+    if (act !== "save") return;
+    const label = $("#hc_label").value.trim(); if (!label) { toast("Enter a column name."); return; }
+    if (cols.some((x, j) => j !== i && hk(x.label) === hk(label))) { toast("A column with this name already exists."); return; }
+    const type = $("#hc_type").value, opts = type === "select" ? [...new Set($("#hc_opts").value.split("\n").map(x => x.trim()).filter(Boolean))] : [];
+    if (type === "select" && !opts.length) { toast("Type the dropdown choices."); return; }
+    if (i >= 0) Object.assign(cols[i], {label, type, opts}); else cols.push({key:"c_" + Date.now().toString(36), label, type, opts});
+    await saveHorseCols(cols); close(); toast(i >= 0 ? "Column updated." : `Column “${label}” added for all horses.`);
+  });
+  const t = $("#hc_type"); t.onchange = () => { $("#hc_optsL").hidden = t.value !== "select"; };
+}
+function manageHorseCols(){
+  const cols = HCOLS();
+  modal(`<h2>Your columns for all horses</h2>
+    ${cols.length ? `<div class="tbl"><table><thead><tr><th>Column</th><th>Type</th><th>Filled for</th><th></th></tr></thead><tbody>${cols.map((c, i) => `<tr><td><b>${esc(c.label)}</b>${c.type==="select"?`<div class="small muted">${esc((c.opts||[]).join(" · "))}</div>`:""}</td>
+      <td class="small">${esc((HCOL_TYPES.find(t => t[0]===c.type)||[,c.type])[1])}</td><td class="small">${S.horses.filter(h => h[c.key] !== undefined && h[c.key] !== "").length} horse(s)</td>
+      <td style="white-space:nowrap"><button class="small" data-act="up:${i}"${i?"":" disabled"}>↑</button> <button class="small" data-act="dn:${i}"${i<cols.length-1?"":" disabled"}>↓</button> <button class="small" data-act="ed:${i}">Edit</button> <button class="small danger" data-act="del:${i}">Delete</button></td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="muted">No extra columns yet.</p>`}
+    <div class="row" style="margin-top:12px"><button data-act="add">+ Add column</button><span class="spacer"></span><button class="pri" data-act="close">Done</button></div>`, async (act, close) => {
+    if (act === "close") return close();
+    const [a, n] = act.split(":"), i = +n, c = cols.slice();
+    const reopen = () => { document.querySelectorAll(".modal-bg").forEach(x => x.remove()); };
+    if (a === "add") { reopen(); return editHorseCol(-1); }
+    if (a === "ed") { reopen(); return editHorseCol(i); }
+    if (a === "up" || a === "dn") { const j = a === "up" ? i - 1 : i + 1; [c[i], c[j]] = [c[j], c[i]]; await saveHorseCols(c); close(); setTimeout(manageHorseCols, 50); return; }
+    if (a === "del") confirmBox(`Delete the column “${cols[i].label}”? It disappears for all horses. Values already typed stay in each horse's record but are no longer shown.`, async () => {
+      c.splice(i, 1); await saveHorseCols(c); close(); toast("Column deleted."); });
+  });
+}
 function renderHorses(main){
   const all = (S.horses || []).slice().sort((a,b) => ((parseFloat(a.listNo) || 1e9) - (parseFloat(b.listNo) || 1e9)) || String(a.name||"").localeCompare(String(b.name||"")));
   const nList = all.filter(h => h.listNo).length, cnt = f => all.filter(f).length;
@@ -2073,20 +2122,20 @@ function renderHorses(main){
     <div class="tile"><div class="n" style="color:var(--warn)">${cnt(h => horseSvc(h).startsWith("Below"))}</div><div class="l">Young (&lt;5)</div></div>
     <div class="tile"><div class="n" style="color:var(--bad)">${cnt(h => horseSvc(h).startsWith("Over"))}</div><div class="l">Aged (&gt;15)</div></div></div>
   <div class="panel"><div class="row"><h2 style="margin:0">Horses / الخيل</h2><span class="spacer"></span>
-    ${nList < H_BUILTIN.n ? `<button id="hSeed">🔓 Load built-in horse list (${H_BUILTIN.n})</button>` : ""}<button id="hXlsx">⬇ Excel</button><button id="hSum">📋 Horse List &amp; summary</button><button class="pri" id="hAdd">+ Add horse</button></div>
+    ${nList < H_BUILTIN.n ? `<button id="hSeed">🔓 Load built-in horse list (${H_BUILTIN.n})</button>` : ""}<button id="hXlsx">⬇ Excel</button><button id="hSum">📋 Horse List &amp; summary</button><button id="hCols">⚙ Columns</button><button id="hAddCol">+ Add column</button><button class="pri" id="hAdd">+ Add horse</button></div>
     <p class="small muted">All horse details in one place – add, edit or delete here. New prescription and the Horse File use this straight away: type a horse's name or ID there and its details pop up to fill (you confirm first), and each field shows the saved value when you click into it.</p>
     <div class="row" style="margin-bottom:8px">${[["all","All"], ...HCATS.map(c => [c[0], c[0].split(" / ")[1] || c[0]])].map(([c,t]) => `<button class="small ${c===horseC?"pri":""}" data-hc="${esc(c)}">${esc(t)} (${c==="all"?all.length:cnt(h => hk(h.category) === hk(c))})</button>`).join("")}</div>
     <input id="hq" placeholder="Search name (Arabic / English), ID, type, notes…" value="${esc(horseQ)}" style="max-width:380px">
-    <div class="tbl" style="margin-top:10px"><table><thead><tr><th>No.</th><th>Patient ID</th><th>Name</th><th>English</th><th>Type / Sex</th><th>Breed</th><th>Born</th><th class="num">Age</th><th class="num">BWT kg</th><th>Source</th><th>Category / purpose</th><th>Service</th><th class="num">Visits</th><th></th></tr></thead><tbody id="hbody"></tbody></table></div>
+    <div class="tbl" style="margin-top:10px"><table><thead><tr><th>No.</th><th>Patient ID</th><th>Name</th><th>English</th><th>Type / Sex</th><th>Breed</th><th>Born</th><th class="num">Age</th><th class="num">BWT kg</th><th>Source</th><th>Category / purpose</th><th>Service</th>${HCOLS().map(c => `<th>${esc(c.label)}</th>`).join("")}<th class="num">Visits</th><th></th></tr></thead><tbody id="hbody"></tbody></table></div>
     <div class="row" style="margin-top:10px;justify-content:center"><button class="pri" id="hAdd2">+ Add horse</button></div></div>`;
   const draw = () => { const q = hk(horseQ);
-    const list = all.filter(h => (horseC === "all" || hk(h.category) === hk(horseC)) && (!q || [h.listNo,h.pid,h.name,h.nameEn,h.sex,h.breed,h.category,h.listNotes,h.source,h.rider,h.color].some(x => hk(x).includes(q))));
+    const list = all.filter(h => (horseC === "all" || hk(h.category) === hk(horseC)) && (!q || [h.listNo,h.pid,h.name,h.nameEn,h.sex,h.breed,h.category,h.listNotes,h.source,h.rider,h.color,...HCOLS().map(c => h[c.key])].some(x => hk(x).includes(q))));
     HORSES_SHOWN = list;
     $("#hbody").innerHTML = list.map(h => { const a = horseAge(h), nv = S.visits.filter(v => ofHorse({pid:h.pid||"", name:h.name||h.nameEn||""}, v)).length;
       return `<tr class="${hcClass(h.category)}"><td>${esc(h.listNo||"")}</td><td>${esc(h.pid||"")}</td><td><b class="ar">${esc(h.name||"")}</b></td><td>${esc(h.nameEn||"")}</td><td class="small">${esc(h.sex||"")}</td><td class="small">${esc(h.breed||"")}</td>
         <td>${esc(h.birth ? dshow(h.birth) : (h.birthYear||""))}</td><td class="num">${a===null?"":a}</td><td class="num">${h.weightKg ? esc(h.weightKg) : ""}</td><td class="small">${esc(h.source||"")}</td>
-        <td class="small">${esc([h.category, h.listNotes].filter(Boolean).join(" • "))}</td><td class="small">${esc(horseSvc(h))}</td><td class="num">${nv||""}</td>
-        <td style="white-space:nowrap"><button class="small" data-he="${esc(h._id)}">Edit</button> <button class="small" data-hr="${esc(h._id)}">Record</button> <button class="small" data-hf="${esc(h._id)}">Horse File</button> <button class="small" data-hn="${esc(h._id)}">+ Rx</button></td></tr>`; }).join("") || `<tr><td colspan="14" class="muted">${all.length ? "No horse matches." : "No horses yet – press “Load built-in horse list” or “+ Add horse”."}</td></tr>`;
+        <td class="small">${esc([h.category, h.listNotes].filter(Boolean).join(" • "))}</td><td class="small">${esc(horseSvc(h))}</td>${HCOLS().map(c => `<td class="small${c.type==="number"?" num":""}">${esc(hcolShow(c, h[c.key]))}</td>`).join("")}<td class="num">${nv||""}</td>
+        <td style="white-space:nowrap"><button class="small" data-he="${esc(h._id)}">Edit</button> <button class="small" data-hr="${esc(h._id)}">Record</button> <button class="small" data-hf="${esc(h._id)}">Horse File</button> <button class="small" data-hn="${esc(h._id)}">+ Rx</button></td></tr>`; }).join("") || `<tr><td colspan="${14 + HCOLS().length}" class="muted">${all.length ? "No horse matches." : "No horses yet – press “Load built-in horse list” or “+ Add horse”."}</td></tr>`;
     const get = id => S.horses.find(x => x._id === id);
     $("#hbody").querySelectorAll("[data-he]").forEach(b => b.onclick = () => editHorse(b.dataset.he));
     $("#hbody").querySelectorAll("[data-hr]").forEach(b => b.onclick = () => { const h = get(b.dataset.hr); openPatient(h.pid||"", h.name||h.nameEn||""); });
@@ -2097,9 +2146,10 @@ function renderHorses(main){
   $("#hq").addEventListener("input", e => { horseQ = e.target.value; draw(); });
   $("#hAdd").onclick = () => editHorse(null); $("#hAdd2").onclick = () => editHorse(null);
   $("#hSum").onclick = () => { location.href = "horse-file.html?list=1"; };
-  $("#hXlsx").onclick = () => saveFile(`horses_${today()}.xlsx`, makeXlsx([{name:"Horses", rows:[["No.","Patient ID","Name (Arabic)","Name (English)","Type / Sex","Breed","Birth date","Birth year","Age","Body weight kg","Weight date","Color","Rider","Microchip","Military No.","Source","Category","Notes","Service status"],
-    ...HORSES_SHOWN.map(h => [h.listNo||"",h.pid||"",h.name||"",h.nameEn||"",h.sex||"",h.breed||"",h.birth||"",h.birthYear||"",horseAge(h)??"",h.weightKg||"",h.weightDate||"",h.color||"",h.rider||"",h.microchip||"",h.militaryNo||"",h.source||"",h.category||"",h.listNotes||"",horseSvc(h)])]}]));
+  $("#hXlsx").onclick = () => saveFile(`horses_${today()}.xlsx`, makeXlsx([{name:"Horses", rows:[["No.","Patient ID","Name (Arabic)","Name (English)","Type / Sex","Breed","Birth date","Birth year","Age","Body weight kg","Weight date","Color","Rider","Microchip","Military No.","Source","Category","Notes","Service status",...HCOLS().map(c => c.label)],
+    ...HORSES_SHOWN.map(h => [h.listNo||"",h.pid||"",h.name||"",h.nameEn||"",h.sex||"",h.breed||"",h.birth||"",h.birthYear||"",horseAge(h)??"",h.weightKg||"",h.weightDate||"",h.color||"",h.rider||"",h.microchip||"",h.militaryNo||"",h.source||"",h.category||"",h.listNotes||"",horseSvc(h),...HCOLS().map(c => hcolShow(c, h[c.key]))])]}]));
   const sb = $("#hSeed"); if (sb) sb.onclick = seedHorses;
+  $("#hAddCol").onclick = () => editHorseCol(-1); $("#hCols").onclick = manageHorseCols;
   draw();
 }
 let HORSES_SHOWN = [];
@@ -2109,7 +2159,8 @@ const HF = [["listNo","No.","text"],["pid","Patient ID","text"],["name","Name (A
 function editHorse(id){
   const h = id ? S.horses.find(x => x._id === id) : {};
   modal(`<h2>${id ? "Edit horse – " + esc([h.name, h.nameEn].filter(Boolean).join(" / ")) : "Add horse"}</h2><div class="grid g4">
-    ${HF.map(([k,l,t]) => { const dl = t.startsWith("dl:") ? t.slice(3) : ""; return `<label${k==="listNotes"||k==="category"?' style="grid-column:span 2"':""}>${esc(l)}<input id="eh_${k}" type="${dl ? "text" : t}"${dl ? ` list="${dl}"` : ""}${t==="number"?' step="any"':""} value="${esc(h[k] ?? "")}"></label>`; }).join("")}</div>
+    ${HF.map(([k,l,t]) => { const dl = t.startsWith("dl:") ? t.slice(3) : ""; return `<label${k==="listNotes"||k==="category"?' style="grid-column:span 2"':""}>${esc(l)}<input id="eh_${k}" type="${dl ? "text" : t}"${dl ? ` list="${dl}"` : ""}${t==="number"?' step="any"':""} value="${esc(h[k] ?? "")}"></label>`; }).join("")}
+    ${HCOLS().map(c => `<label>${esc(c.label)}${hcolInput(c, "ehc_" + c.key, h[c.key])}</label>`).join("")}</div>
     <datalist id="dl_htypes">${HTYPES.map(x => `<option>${esc(x)}</option>`).join("")}</datalist><datalist id="dl_hsrc">${HSRC.map(x => `<option>${esc(x)}</option>`).join("")}</datalist>
     <datalist id="dl_hcat">${HCATS.map(x => `<option>${esc(x[0])}</option>`).join("")}</datalist><datalist id="dl_hbreeds">${(L().breeds || []).map(x => `<option>${esc(x)}</option>`).join("")}</datalist>
     <p class="small muted">Saved here = used by New prescription and the Horse File. Birth year fills itself from the birth date.</p>
@@ -2117,6 +2168,7 @@ function editHorse(id){
     if (act === "close") return close();
     if (act === "del") return confirmBox(`Delete ${h.name || h.nameEn || "this horse"} from the horse list permanently? Its prescriptions, vaccinations and saved Horse Files are kept.`, async () => { await W(() => db.doc("horses/" + id).delete()); close(); toast("Horse deleted."); });
     const d = {}; HF.forEach(([k]) => { d[k] = $("#eh_" + k).value.trim(); });
+    HCOLS().forEach(c => { const el = $("#ehc_" + c.key); if (el) d[c.key] = c.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value.trim(); });
     if (!d.name && !d.nameEn && !d.pid) { toast("Enter a name or Patient ID."); return; }
     if (d.birth && !d.birthYear) d.birthYear = d.birth.slice(0,4);
     if (d.weightKg) { d.weightKg = Number(d.weightKg); if (!d.weightDate) d.weightDate = today(); if (!h.weightMethod || String(h.weightKg) !== String(d.weightKg)) d.weightMethod = "horse list"; } else delete d.weightKg;
@@ -2153,9 +2205,19 @@ function showHint(el, html, onUse, label){
     b.addEventListener("mouseenter", () => clearTimeout(HINT_T)); b.addEventListener("mouseleave", () => hideHintLater(6000)); }
   clearTimeout(HINT_T); HINT_EL = el;
   b.innerHTML = `<span>${html}</span>${onUse ? `<button type="button" class="pri small">${esc(label || "Use")}</button>` : ""}`; b.hidden = false;
-  const r = el.getBoundingClientRect(), h = b.offsetHeight; // above the field, so the dropdown list (opens below) never covers it
-  b.style.left = Math.max(4, r.left + scrollX) + "px"; b.style.top = (r.top > h + 8 ? r.top + scrollY - h - 6 : r.bottom + scrollY + 6) + "px";
+  placeHint(b, el);
   const btn = b.querySelector("button"); if (btn) btn.onmousedown = e => { e.preventDefault(); onUse(); hideHint(); };
+}
+// beside the field (a dropdown opens up or down, never sideways); no room beside → above or below, on the side the dropdown won't use
+function placeHint(b, el){
+  const r = el.getBoundingClientRect(), w = b.offsetWidth, h = b.offsetHeight, vw = document.documentElement.clientWidth, vh = innerHeight;
+  let left, top;
+  // a dropdown opens downwards when there is room below, otherwise upwards → put the pop-up on the other side
+  left = Math.min(Math.max(4, r.left), vw - w - 4);
+  const below = vh - r.bottom, dropDown = below >= 280 || below >= r.top;
+  top = dropDown ? r.top - h - 8 : r.bottom + 8;
+  if (dropDown && top < 4) top = r.bottom + 8;
+  b.style.left = (left + scrollX) + "px"; b.style.top = (top + scrollY) + "px";
 }
 function hideHint(){ clearTimeout(HINT_T); HINT_EL = null; const b = $("#fhint"); if (b) b.hidden = true; }
 function hideHintLater(ms){ clearTimeout(HINT_T); HINT_T = setTimeout(() => { if (HINT_EL && document.activeElement === HINT_EL) return; hideHint(); }, ms); }
@@ -2440,6 +2502,23 @@ function editDz(chunkId, idx){
 }
 
 /* ---------------- Settings & lists ---------------- */
+
+/* ---------- Horse File dropdown lists (same lists as the Horse File's own ⚙ Settings & lists) ---------- */
+const HF_LIST_DEFS = [{"key": "sel:bcs", "en": "BCS (1-9)", "ar": "حالة الجسم", "opts": ["1", "2", "3", "4", "5", "6", "7", "8", "9"]}, {"key": "sel:shoeType", "en": "Shoe Type", "ar": "نوع التحذية", "opts": ["Full / كامل", "Front / أمامي", "Hind / خلفي"]}, {"key": "sel:shoeing", "en": "Shoeing", "ar": "التحذية", "opts": ["Regular / عادي", "Therapeutic / طبي"]}, {"key": "sel:horseshoe", "en": "Type of Horseshoes", "ar": "نوع الحدوات", "opts": ["Standard / عادية", "Therapeutic / حدوة طبية", "Clips / مشبك", "Other / أخرى"]}, {"key": "sel:hoof", "en": "Hoof Condition", "ar": "حالة الحوافر", "opts": ["Good / جيدة", "Fair / مقبولة", "Needs Follow-up / تحتاج متابعة"]}, {"key": "sel:mm", "en": "Mucous Membranes", "ar": "الأغشية", "opts": ["Pink / وردية", "Pale / شاحبة", "Cyanotic / مزرقة"]}, {"key": "sel:behavior", "en": "Behavior", "ar": "السلوك", "opts": ["Normal / طبيعي", "Lethargic / خامل"]}, {"key": "sel:appetite", "en": "Appetite", "ar": "الشهية", "opts": ["Normal / طبيعي", "Reduced / خفيف", "Absent / معدوم"]}, {"key": "sel:prevDis", "en": "Previous Diseases", "ar": "أمراض سابقة", "opts": ["None / لا يوجد", "Yes / يوجد"]}, {"key": "sel:prevInj", "en": "Previous Injuries", "ar": "إصابات سابقة", "opts": ["None / لا يوجد", "Yes / يوجد"]}, {"key": "sel:curInj", "en": "Current Injury", "ar": "الإصابة الحالية", "opts": ["None / لا يوجد", "Yes / يوجد"]}, {"key": "sel:injType", "en": "Type", "ar": "النوع", "opts": ["Bone / عظمي", "Muscle / عضلي", "Joint / مفصلي", "Skin / جلدية", "Other / أخرى"]}, {"key": "sel:injSev", "en": "Severity (1-5)", "ar": "الدرجة", "opts": ["1", "2", "3", "4", "5"]}, {"key": "sel:jump", "en": "Suitable for Jumping", "ar": "يصلح للقفز", "opts": ["Yes / نعم", "No / لا", "With Caution / بحذر"]}, {"key": "sel:flat", "en": "Suitable for Flatwork", "ar": "يصلح للتدريب الأرضي", "opts": ["Yes / نعم", "No / لا", "With Caution / بحذر"]}, {"key": "sel:sport", "en": "Type of Equestrian Sport", "ar": "نوع الرياضة", "opts": ["Show Jumping / قفز الحواجز", "Flatwork / Dressage / تدريب أرضي", "Eventing / حدث شامل", "Other / أخرى"]}, {"key": "dl:sexList", "en": "Sex / Type", "ar": "الجنس / النوع", "opts": ["فرس / Mare", "حصان / Gelding", "فحل / Stallion", "مهره / Filly", "فلو / Colt foal", "فلوه / Filly foal", "بوني فحل / Pony stallion", "بوني فرس / Pony mare"]}, {"key": "dl:breedList", "en": "Breed", "ar": "السلالة", "opts": ["Arabian / عربي", "Thoroughbred / إنجليزي", "Warmblood / دم دافئ", "Crossbred / مهجن", "Pony / بوني", "Other / أخرى"]}, {"key": "dl:srcList", "en": "Source", "ar": "المصدر", "opts": ["مستوردة / Imported", "انتاج الفروسية / Equestrian production", "مهداة / Gifted"]}, {"key": "dl:catList", "en": "Category / purpose", "ar": "الفئة", "opts": ["كبير بالسن / Aged – out of service", "فريق القفز / Jumping team", "مراسيم / Ceremonial", "انتاج / Breeding", "صغار – تدريب / Young – training", "مدرسة الأطفال / Children's school"]}];
+async function bindHfLists(){
+  const grid = $("#hfLsGrid"); if (!grid) return;
+  let saved = {};
+  try { const d = await db.doc("config/hfLists").get(); saved = (d.exists && d.data().lists) || {}; } catch(e){ saved = {}; }
+  if (!document.body.contains(grid)) return;
+  const draw = src => { grid.innerHTML = HF_LIST_DEFS.map(x => `<label>${esc(x.en)} <span class="small muted" dir="rtl">${esc(x.ar)}</span><textarea rows="6" data-hfl="${esc(x.key)}">${esc((src[x.key] || x.opts).join("\n"))}</textarea></label>`).join(""); };
+  draw(saved);
+  $("#hfLsReset").onclick = () => confirmBox("Put all Horse File dropdown lists back to the original choices? (Press Save to keep it.)", () => { draw({}); });
+  $("#hfLsSave").onclick = async () => {
+    const L = {}; grid.querySelectorAll("[data-hfl]").forEach(t => { L[t.dataset.hfl] = [...new Set(t.value.split("\n").map(v => v.trim()).filter(Boolean))]; });
+    await W(() => db.doc("config/hfLists").set({lists:L, updatedAt:new Date().toISOString()}));
+    toast("Horse File lists saved.");
+  };
+}
 function renderSettings(main){
   const st = ST(), l = L();
   const ta = (k, lab) => `<label>${lab} (one per line)<textarea id="ls_${k}" rows="6">${esc((l[k]||[]).join("\n"))}</textarea></label>`;
@@ -2458,6 +2537,10 @@ function renderSettings(main){
     <div class="tbl"><table><thead><tr><th>Frequency</th><th class="num">Doses per day</th><th class="num">Fixed no. of doses</th><th></th></tr></thead><tbody id="fbody">
     ${(l.freqs||[]).map((f,i)=>`<tr><td><input data-f="${i}" data-k="n" value="${esc(f.n)}"></td><td><input data-f="${i}" data-k="perDay" type="number" step="any" value="${esc(+(+f.perDay).toFixed(4))}"></td><td><input data-f="${i}" data-k="fixed" type="number" step="any" value="${esc(f.fixed??"")}"></td><td><button class="small danger" data-fdel="${i}">Remove</button></td></tr>`).join("")}
     </tbody></table></div><div class="row" style="margin-top:8px"><button id="btnAddFreq">+ Add frequency</button><span class="spacer"></span><button class="pri" id="btnSaveLists">Save lists</button></div></div>
+  <div class="panel" id="hfListsPanel"><div class="row"><h2 style="margin:0">Horse File dropdown lists / قوائم الملف الشامل</h2><span class="spacer"></span><a href="horse-file.html">Open Horse File →</a></div>
+    <p class="small muted">The dropdown menus in the Horse File (comprehensive file) and the horse editor. One choice per line. Saved for the whole site.</p>
+    <div class="grid g4" id="hfLsGrid"><p class="small muted">Loading…</p></div>
+    <div class="row" style="margin-top:8px"><button id="hfLsReset">Reset to default</button><span class="spacer"></span><button class="pri" id="hfLsSave">Save Horse File lists</button></div></div>
   <div class="panel"><h2>Backup &amp; export</h2><p class="small muted">Keep a copy of your data. JSON holds everything; CSV opens in Excel.</p>
     <div class="row"><button id="bkJson">Download full backup (JSON)</button><button id="bkVisits">Visits (CSV)</button><button id="bkStock">Stock (CSV)</button><button id="bkMeds">Medicines (CSV)</button></div>
     <h3>Restore from a backup file</h3><p class="small muted">Loads a full backup (JSON) – from this site or from the claude.ai version. Records with the same id are overwritten; others are kept.</p>
@@ -2470,6 +2553,7 @@ function renderSettings(main){
   main.querySelectorAll("[data-fdel]").forEach(b=>b.onclick=()=>{ freqs.splice(+b.dataset.fdel,1); saveLists(freqs); });
   $("#btnAddFreq").onclick = () => { freqs.push({n:"New frequency",perDay:1,fixed:null}); saveLists(freqs); };
   $("#btnSaveLists").onclick = () => saveLists(freqs);
+  bindHfLists();
   $("#btnSaveSet").onclick = async () => { const d = {clinic:$("#st_clinic").value, vet:$("#st_vet").value, imMax:N($("#st_imMax").value)||15, expiryDays:N($("#st_expiryDays").value)||60, remindDays:N($("#st_remindDays").value) ?? 14, vaccMonths:N($("#st_vaccMonths").value) ?? 12, dewormMonths:N($("#st_dewormMonths").value) ?? 3, foalAge:st.foalAge||1, dataVersion: N(st.dataVersion) || SEED.version, vitals: st.vitals || null};
     await W(()=>db.doc("config/settings").set(d)); toast("Settings saved."); };
   const csv = rows => rows.map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
@@ -2566,7 +2650,7 @@ function loadScript(src){ return new Promise((res, rej) => { const s = document.
 bindGlobalSearch();
 function startData(){
   ["meds","doses","stock","visits","drafts","medimg","preventive","notes","horses"].forEach(k => sub(k, k));
-  sub("dchunks","dchunks"); subDoc("config/lists","lists"); subDoc("config/settings","settings");
+  sub("dchunks","dchunks"); subDoc("config/lists","lists"); subDoc("config/horseCols","horseCols"); subDoc("config/settings","settings");
   try { db.collection("horseFiles").onSnapshot(snap => { S.horseFiles = snap.docs.map(d => Object.assign({_id:d.id}, d.data())); onData(); }, e => { S.horseFiles = []; }); } catch(e){} // saved Horse File records (optional)
 }
 function loginPanel(msg){
