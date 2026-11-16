@@ -1,1 +1,25 @@
-const CACHE = "vetdesk-v2"; const FILES = ["./", "./index.html", "./horse-file.html", "./firebase-config.js", "./manifest.json", "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js", "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js", "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"]; self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => Promise.all(FILES.map(f => c.add(new Request(f, {mode: f.startsWith("http") ? "no-cors" : "same-origin"})).catch(() => null))))); self.skipWaiting(); }); self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x))))); self.clients.claim(); }); self.addEventListener("fetch", e => { const u = new URL(e.request.url); if (e.request.method !== "GET") return; if (u.hostname.endsWith("googleapis.com") && !u.hostname.startsWith("fonts")) return; e.respondWith(fetch(e.request).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {}); return r; }).catch(() => caches.match(e.request).then(r => r || caches.match("./index.html")))); });
+// My Equine Clinic – service worker
+// Network first: when online you always get the newest pages from GitHub;
+// the saved copy is used only when there is no connection.
+const CACHE = "vetdesk-v10";
+const CORE = ["./", "index.html", "horse-file.html", "manifest.json", "firebase-config.js"];
+
+self.addEventListener("install", e => {
+  e.waitUntil(caches.open(CACHE).then(c => Promise.all(CORE.map(u => c.add(u).catch(() => {})))));
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", e => {
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+
+self.addEventListener("fetch", e => {
+  const req = e.request;
+  if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return; // Firebase, fonts, Excel tools: not touched
+  e.respondWith(
+    fetch(req, {cache: "no-store"}).then(res => {
+      if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
+      return res;
+    }).catch(() => caches.match(req, {ignoreSearch: true}).then(r => r || caches.match("index.html")))
+  );
+});

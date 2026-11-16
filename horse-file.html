@@ -51,6 +51,9 @@
   .box button{padding:8px 12px;border:0;border-radius:4px;cursor:pointer;font-weight:bold}
   .b-rep{background:#8b5cf6;color:#fff}.b-imp{background:#0ea5e9;color:#fff}.b-formx{background:#14b8a6;color:#fff}
   [hidden]{display:none!important}
+  .listbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:8px 14px}
+  .listbar button{background:#d97706;color:#fff;border:0;border-radius:4px;padding:8px 14px;font-weight:bold;cursor:pointer}
+  .listbar .ver{margin-inline-start:auto;font-size:12px;color:#92400e}
   #fhint{position:absolute;z-index:9999;background:#fffbe6;border:2px solid #e5b400;border-radius:6px;padding:7px 9px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.25);max-width:420px;display:flex;gap:8px;align-items:center}
   #fhint button{padding:3px 10px;border:0;border-radius:4px;background:#16a34a;color:#fff;font-weight:bold;cursor:pointer}
   /* v3 – English and Arabic side by side */
@@ -107,6 +110,12 @@
   <button class="b-formx" id="btnLists">⚙ Settings &amp; lists / الإعدادات</button>
   <button class="b-clear" id="btnClear">New / جديد</button>
   <span id="status">Manual mode / إدخال يدوي</span>
+</div>
+<div class="listbar noprint">
+  <b>⚙ Dropdown lists / القوائم المنسدلة</b>
+  <span class="hint" style="padding:0">Edit the choices in every dropdown of this file – one per line / عدّل خيارات كل القوائم</span>
+  <button id="barLists">✏ Edit all dropdown lists / تعديل كل القوائم</button>
+  <span class="ver">Horse File v10 · 16 Nov 2026</span>
 </div>
 
 <div class="modal noprint" id="repModal"><div class="box">
@@ -1173,7 +1182,7 @@ function showLists(){
     <textarea rows="6" data-l="${escT(x.key)}">${escT((LISTS[x.key]||LIST_DEFAULT[x.key]).join("\n"))}</textarea></div>`).join("");
   $("#lsModal").classList.add("show");
 }
-$("#btnLists").onclick=showLists; $("#openLists").onclick=showLists;
+$("#btnLists").onclick=showLists; $("#barLists").onclick=showLists; $("#openLists").onclick=showLists;
 $("#lsClose").onclick=()=>$("#lsModal").classList.remove("show");
 $("#lsReset").onclick=()=>{ if(!confirm("Put all dropdown lists back to the original choices? / إرجاع القوائم للأصل؟")) return;
   $("#lsGrid").querySelectorAll("[data-l]").forEach(t=>t.value=LIST_DEFAULT[t.dataset.l].join("\n")); };
@@ -1185,6 +1194,7 @@ $("#lsSave").onclick=async()=>{
 };
 await loadLists();
 
+if("serviceWorker" in navigator && location.protocol==="https:"){ try{ navigator.serviceWorker.register("sw.js").then(r=>r.update()).catch(()=>{}); }catch(e){} }
 await checkSeed();
 // open directly: horse-file.html?pid=..&name=..  (&recs=1 → saved records, ?list=1 → horse list)
 { const u=new URLSearchParams(location.search), pid=u.get("pid"), nm=u.get("name");

@@ -2522,7 +2522,7 @@ async function bindHfLists(){
 function renderSettings(main){
   const st = ST(), l = L();
   const ta = (k, lab) => `<label>${lab} (one per line)<textarea id="ls_${k}" rows="6">${esc((l[k]||[]).join("\n"))}</textarea></label>`;
-  main.innerHTML = `<div class="panel"><h2>Settings</h2><div class="grid g4">
+  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v10 · 16 Nov 2026</span></div><div class="grid g4">
     <label>Clinic / unit name<input id="st_clinic" value="${esc(st.clinic)}"></label><label>Veterinarian (printed)<input id="st_vet" value="${esc(st.vet)}"></label>
     <label>Max IM volume per site (ml)<input id="st_imMax" type="number" value="${esc(st.imMax)}"></label><label>Expiry warning (days)<input id="st_expiryDays" type="number" value="${esc(st.expiryDays)}"></label><label>Vaccination / deworming reminder (days before)<input id="st_remindDays" type="number" value="${esc(st.remindDays ?? 14)}"></label>
     <label>Next vaccination after (months)<input id="st_vaccMonths" type="number" min="0" value="${esc(st.vaccMonths ?? 12)}"></label><label>Next deworming after (months)<input id="st_dewormMonths" type="number" min="0" value="${esc(st.dewormMonths ?? 3)}"></label></div>
@@ -2686,7 +2686,7 @@ function loginPanel(msg){
   } else {
     MODE = "local"; db = makeLocalDB(); startData(); route();
   }
-  if ("serviceWorker" in navigator && location.protocol === "https:") { try { navigator.serviceWorker.register("sw.js"); } catch(e){} }
+  if ("serviceWorker" in navigator && location.protocol === "https:") { try { navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(() => {}); } catch(e){} }
 })();
 </script>
 </body>
