@@ -167,13 +167,16 @@ tr.bad td{background:var(--badbg)}
 @media (max-width:640px){.inv-row{grid-template-columns:1fr 1fr auto}.inv-row .res{grid-column:1/-1;order:5}}
 .pvauto{border:1px dashed var(--accent2);border-radius:8px;padding:10px;margin:8px 0;background:var(--soft)}
 .pvauto[hidden]{display:none}
+.found-card{border:2px solid var(--ok);background:var(--okbg);border-radius:8px;padding:10px;margin:0 0 10px}
+.found-card .ar{direction:rtl;unicode-bidi:isolate}
+.found-card .av{margin:6px 0 0;font-size:13px;color:var(--ink)}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
 <header>
   <div class="hd"><h1 id="clinicName">Equine Vet Clinic Desk</h1><span class="sub">Case sheet · Rx calculator · Stock · History</span>
-    <div class="gs" role="search"><span class="ic" aria-hidden="true">🔍</span><input id="gsq" type="search" placeholder="Search anything – horse, ID, diagnosis, medicine, stock, note…" autocomplete="off" aria-label="Search everything" aria-controls="gsres"><div class="gs-res" id="gsres" role="listbox" hidden></div></div>
+    <div class="gs" role="search"><span class="ic" aria-hidden="true">🔍</span><input id="gsq" type="search" placeholder="Search anything – horse (Arabic/English), ID, diagnosis, medicine, stock, note…" autocomplete="off" aria-label="Search everything" aria-controls="gsres"><div class="gs-res" id="gsres" role="listbox" hidden></div></div>
     <button class="hbtn small" id="hNotes" type="button">📝 Notes</button>
     <span class="status" id="status">Connecting…</span></div>
   <nav id="nav">
@@ -197,7 +200,7 @@ tr.bad td{background:var(--badbg)}
 "use strict";
 const SEED = JSON.parse(document.getElementById("seed").textContent);
 let db = null, dl = null, writeBlocked = false;
-const S = {meds:[], doses:[], stock:[], visits:[], drafts:[], dchunks:[], medimg:[], preventive:[], notes:[], horses:[], lists:null, settings:null, loaded:{}, live:false};
+const S = {meds:[], doses:[], stock:[], visits:[], drafts:[], dchunks:[], medimg:[], preventive:[], notes:[], horses:[], horseFiles:[], lists:null, settings:null, loaded:{}, live:false};
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const N = v => (v === "" || v === null || v === undefined || isNaN(+v)) ? null : +v;
@@ -446,14 +449,14 @@ function loadDraft(){ try{ const s = localStorage.getItem("rxDraft"); return s ?
 function opts(arr, sel, blank=true){ return (blank?'<option value=""></option>':'') + arr.map(v => `<option${v===sel?" selected":""}>${esc(v)}</option>`).join(""); }
 function ageText(birth, at){ if(!birth) return ""; const b=new Date(birth), a=new Date(at||today()); if(isNaN(b)) return ""; let m=(a.getFullYear()-b.getFullYear())*12+(a.getMonth()-b.getMonth()); if(a.getDate()<b.getDate()) m--; if(m<0) return ""; return m>=12? `${Math.floor(m/12)} y ${m%12} m` : `${m} m`; }
 function prevVisits(){
-  const id = RX.pid.trim().toLowerCase(), nm = RX.name.trim().toLowerCase();
-  if (!id && !nm) return [];
-  return S.visits.filter(v => (id && (v.pid||"").toLowerCase() === id) || (nm && (v.name||"").toLowerCase() === nm)).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const p = {pid:RX.pid, name:RX.name};
+  if (!hk(p.pid) && !hk(p.name)) return [];
+  return S.visits.filter(v => ofHorse(p, v)).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
 }
 function renderRx(main){
   const l = L(), P = RX;
-  const names = [...new Set(S.visits.map(v=>v.name).filter(Boolean))].sort();
-  const ids = [...new Set(S.visits.map(v=>v.pid).filter(Boolean))].sort();
+  const names = [...new Set([...S.visits.map(v=>v.name), ...(S.horses||[]).flatMap(h=>[h.name, h.nameEn])].filter(Boolean))].sort();
+  const ids = [...new Set([...S.visits.map(v=>v.pid), ...(S.horses||[]).map(h=>h.pid)].filter(Boolean))].sort();
   const dz = diseasesAll(), dtypes = l.diseaseTypes || [...new Set(dz.map(d=>d.t))];
   main.innerHTML = `
   <div class="panel"><div class="row"><h2 style="margin:0">New prescription</h2><span class="spacer"></span>
@@ -466,8 +469,8 @@ function renderRx(main){
     <div class="grid g4">
       <label for="f_status">New / Old patient<select id="f_status">${opts(["New","Old"],P.status,false)}</select></label>
       <label for="f_date">Prescription date<input id="f_date" type="date" value="${esc(P.date)}"></label>
-      <label for="f_pid">Patient ID<input id="f_pid" list="dl_ids" value="${esc(P.pid)}" autocomplete="off"></label>
-      <label for="f_name">Name<input id="f_name" list="dl_names" value="${esc(P.name)}" autocomplete="off"></label>
+      <label for="f_pid">Patient ID<input id="f_pid" list="dl_ids" value="${esc(P.pid)}" autocomplete="off" placeholder="Type ID…"></label>
+      <label for="f_name">Name<input id="f_name" list="dl_names" value="${esc(P.name)}" autocomplete="off" placeholder="Arabic or English name…"></label>
       <label for="f_sex">Sex<select id="f_sex">${opts(l.sexes||["Male","Female","Geld"],P.sex)}</select></label>
       <label for="f_breed">Breed<input id="f_breed" list="dl_breeds" value="${esc(P.breed)}"></label>
       <label for="f_birth">Birth date<input id="f_birth" type="date" value="${esc(P.birth)}"></label>
@@ -594,22 +597,42 @@ function showDz(){
   box.innerHTML = d ? `<p><b>Cause:</b> ${esc(d.c||"–")}</p><p><b>Location:</b> ${esc(d.l||"–")}</p><p class="red">Classic sign: ${esc(d.s||"–")}</p><p><b>Basic treatment:</b> ${esc(d.b||"–")}</p><p class="small muted">For reference only – not printed on the prescription.</p>`
                 : `<span class="muted small">Pick a disease to see its cause, location, classic sign and basic treatment (reference only, not printed).</span>`;
 }
+let FOUND_KEY = "";
 function drawPrev(){
   const box = $("#prevBox"); if (!box) return;
-  const pv = prevVisits();
-  if (!RX.pid && !RX.name) { box.innerHTML = `<p class="small muted">Type the ID or name – previous visits appear here.</p>`; return; }
-  const hw = hfWeight(RX);
+  if (!RX.pid && !RX.name) { FOUND_KEY = ""; box.innerHTML = `<p class="small muted">Type the ID or name (Arabic or English) – everything available for that horse pops up here, with a <b>Fill all</b> button.</p>`; return; }
+  const pv = prevVisits(), hr = horseRec(RX), hw = hfWeight(RX);
   if (hw && !RX.bwt) { RX.bwt = hw.kg; const bi = $("#f_bwt"); if (bi) bi.value = hw.kg; saveDraft(); setTimeout(() => { if (typeof refreshRxCalc === "function") refreshRxCalc(); }, 0); }
-  const hwNote = hw ? `<p class="small" style="margin:0 0 6px">🐴 Horse File weight: <b>${esc(hw.kg)} kg</b>${hw.date ? " · " + esc(dshow(hw.date)) : ""}${hw.method ? " · " + esc(hw.method) : ""}${String(RX.bwt) !== hw.kg ? ` <button id="btnHfW" class="small">Use this weight</button>` : ""} · <a href="${esc(hfLink(RX.pid, RX.name))}">Open Horse File</a></p>` : "";
-  if (!pv.length) { box.innerHTML = hwNote + `<p class="small muted">${RX.status==="Old" ? "No saved visit found for this ID / name." : "New patient – no previous visits."}</p>`; const ub = $("#btnHfW"); if (ub) ub.onclick = () => { RX.bwt = hw.kg; saveDraft(); render(true); }; return; }
-  const last = pv[0];
-  const due = [...latestPrev().values()].filter(r => r.next && daysUntil(r.next) <= remindDays() && sameHorse(r, last));
-  box.innerHTML = hwNote + (due.length ? `<p class="small red" style="margin:0 0 6px">Due: ${due.map(r => `${r.kind === "vacc" ? "💉" : "🪱"} ${esc(r.drug)} – ${esc(dshow(r.next))}`).join(" · ")}</p>` : "") + `<div class="row"><b>Previous visits: ${pv.length}</b><span class="spacer"></span><button id="btnRec" class="small">📋 Full patient record</button><button id="btnFill" class="small">Fill sex / breed / birth date from last visit</button></div>
+  const last = pv[0] || {}, files = hFiles(RX);
+  let card = "";
+  if (hr || pv.length) {
+    const d = rxFillData({pid:RX.pid, name:RX.name}, pv, hr, hw);
+    const LABS = {pid:"Patient ID", name:"Name", sex:"Sex", breed:"Breed", birth:"Birth date", type:"Type", bwt:"BWT (kg)", status:"New / Old"};
+    const changes = Object.keys(d).filter(k => LABS[k] && String(RX[k] ?? "") !== d[k]);
+    const nm = hr ? [hr.name, hr.nameEn].filter(Boolean).join(" / ") : (last.name || RX.name);
+    const age = hr && hr.birthYear ? new Date().getFullYear() - (+hr.birthYear) : null;
+    const avail = [hr && hr.sex, (last.breed || (hr && hr.breed)) && "breed " + (last.breed || hr.breed), last.birth ? "born " + dshow(last.birth) : (hr && hr.birthYear ? `born ${hr.birthYear}${age !== null && !isNaN(age) ? ` (${age} y)` : ""}` : ""),
+      hw ? `Horse File weight ${hw.kg} kg${hw.date ? " (" + dshow(hw.date) + ")" : ""}` : (last.bwt ? `last weight ${last.bwt} kg` : ""), hr && hr.category, `${pv.length} visit(s)`, last.date ? "last visit " + dshow(last.date) : "", files.length ? `${files.length} saved Horse File(s)` : ""].filter(Boolean);
+    card = `<div class="found-card"><div class="row"><b>✔ Found: <span class="ar">${esc(nm)}</span></b>${(RX.pid || (hr && hr.pid)) ? `<span class="pill p-n">ID ${esc(RX.pid || hr.pid)}</span>` : ""}<span class="spacer"></span>
+      ${changes.length ? `<button class="pri small" id="btnFillAll">Fill all / تعبئة الكل</button>` : `<span class="pill p-ok">All details filled</span>`}</div>
+      <div class="av">Available: ${esc(avail.join(" · "))}</div>
+      <div class="row small" style="margin-top:6px"><button class="small" id="btnRec">📋 Full patient record</button><a href="${esc(hfLink(RX.pid || (hr && hr.pid) || "", (hr && hr.name) || RX.name))}">🐴 Open Horse File</a>${files.length ? ` · <a href="${esc(hfLink(RX.pid || (hr && hr.pid) || "", (hr && hr.name) || RX.name))}&recs=1">📂 Saved Horse Files (${files.length})</a>` : ""}</div></div>`;
+    const key = hr ? "h:" + hr._id : "v:" + hk(last.pid || last.name);
+    if (key !== FOUND_KEY) { FOUND_KEY = key; if (changes.length) toast(`Info found for ${nm} – press “Fill all” to use it.`, 3500); }
+    setTimeout(() => { const fb = $("#btnFillAll"); if (!fb) return;
+      fb.onclick = () => confirmBox(`Fill the form with the available info for ${nm}?\n\nThis fills: ${changes.map(k => `${LABS[k]} → ${k === "birth" ? dshow(d[k]) : d[k]}`).join(", ")}.${changes.some(k => RX[k]) ? "\nFields you already typed will be replaced." : ""}${!last.birth && d.birth ? "\n(Birth date set to 1 Jan of the birth year from the horse list – correct it if you know the exact date.)" : ""}`,
+        () => { Object.assign(RX, d); saveDraft(); toast("Filled – please check the details."); }); }, 0);
+  }
+  if (!pv.length) {
+    box.innerHTML = card + `<p class="small muted">${hr ? "No saved visit yet for this horse." : RX.status==="Old" ? "No saved visit or horse-list entry found for this ID / name." : "New patient – no previous visits."}</p>`;
+    const rb = $("#btnRec"); if (rb) rb.onclick = () => openPatient(RX.pid || (hr && hr.pid) || "", (hr && hr.name) || RX.name);
+    return;
+  }
+  const due = [...latestPrev().values()].filter(r => r.next && daysUntil(r.next) <= remindDays() && ofHorse({pid:last.pid, name:last.name}, r));
+  box.innerHTML = card + (due.length ? `<p class="small red" style="margin:0 0 6px">Due: ${due.map(r => `${r.kind === "vacc" ? "💉" : "🪱"} ${esc(r.drug)} – ${esc(dshow(r.next))}`).join(" · ")}</p>` : "") + `<div class="row"><b>Previous visits: ${pv.length}</b></div>
   ${pv.slice(0,6).map(v => visitCard(v,true)).join("")}${pv.length>6?`<p class="small"><a href="#history">See all in History</a></p>`:""}`;
-  $("#btnFill").onclick = () => { ["sex","breed","birth"].forEach(k => { if (last[k]) RX[k] = last[k]; }); if (last.bwt && !RX.bwt) RX.bwt = last.bwt; saveDraft(); render(true); };
-  { const ub = $("#btnHfW"); if (ub) ub.onclick = () => { RX.bwt = hw.kg; saveDraft(); render(true); }; }
   box.querySelectorAll("[data-open]").forEach(b => b.onclick = () => openVisit(b.dataset.open));
-  bindPat(box); $("#btnRec").onclick = () => openPatient(last.pid, last.name);
+  bindPat(box); { const rb = $("#btnRec"); if (rb) rb.onclick = () => openPatient(last.pid, last.name); }
 }
 function pickerHTML(id, value, placeholder){
   return `<div class="pick" data-pick="${id}"><input class="pick-in" id="${id}" value="${esc(value||"")}" placeholder="${esc(placeholder)}" autocomplete="off"><div class="pick-pop" hidden><div class="pick-list" role="listbox"></div><div class="pick-info"><span class="muted">Point at an item to see details.</span></div></div></div>`;
@@ -1206,8 +1229,7 @@ function openPatient(pid, name){ PAT = {pid:(pid||"").trim(), name:(name||"").tr
 function bindPat(root){ root.querySelectorAll("[data-pat]").forEach(b => b.onclick = () => openPatient(b.dataset.pid, b.dataset.pname)); }
 function patientVisits(){
   if (!PAT) return [];
-  const id = PAT.pid.toLowerCase(), nm = PAT.name.toLowerCase();
-  return S.visits.filter(v => (id && (v.pid||"").trim().toLowerCase() === id) || (nm && (v.name||"").trim().toLowerCase() === nm))
+  return S.visits.filter(v => ofHorse(PAT, v))
     .sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||"").localeCompare(a.createdAt||""));
 }
 function visitRows(v){
@@ -1232,10 +1254,12 @@ function recordInner(vs, media){
 function renderPatient(main){
   if (!PAT) { main.innerHTML = `<div class="panel"><h2>Patient record</h2><p>Open <a href="#history">History &amp; search</a> and click a horse's name.</p></div>`; return; }
   const vs = patientVisits(), last = vs[0] || {};
-  const title = last.name || PAT.name || PAT.pid || "Patient";
-  const info = [["Sex",last.sex],["Breed",last.breed],["Birth date / age",last.birth ? dshow(last.birth) + " · " + ageText(last.birth) : ""],["Type",last.type],["Last body weight",last.bwt ? last.bwt + " kg" : ""],["Horse File weight",(() => { const hw = hfWeight({pid:last.pid||PAT.pid, name:last.name||PAT.name}); return hw ? hw.kg + " kg" + (hw.date ? " · " + dshow(hw.date) : "") : ""; })()],["Visits",String(vs.length)]].filter(r => r[1]);
+  const hr = horseRec({pid:last.pid||PAT.pid, name:last.name||PAT.name}), hfl = hFiles({pid:last.pid||PAT.pid, name:last.name||PAT.name});
+  const title = last.name || PAT.name || (hr && (hr.name || hr.nameEn)) || PAT.pid || "Patient";
+  const hAge = hr && /^\d{4}$/.test(String(hr.birthYear||"")) ? new Date().getFullYear() - (+hr.birthYear) : null;
+  const info = [["Name (Arabic / English)", hr ? [hr.name, hr.nameEn].filter(Boolean).join(" / ") : ""],["Type (horse list)", hr && hr.sex],["Birth year (horse list)", hr && hr.birthYear ? hr.birthYear + (hAge !== null ? ` · ${hAge} y` : "") : ""],["Source", hr && hr.source],["Category", hr && hr.category],["List notes", hr && hr.listNotes],["Saved Horse Files", hfl.length ? String(hfl.length) + " · last " + dshow(hfl.map(r => (r.savedAt||"").slice(0,10)).sort().pop()) : ""],["Sex",last.sex],["Breed",last.breed],["Birth date / age",last.birth ? dshow(last.birth) + " · " + ageText(last.birth) : ""],["Type",last.type],["Last body weight",last.bwt ? last.bwt + " kg" : ""],["Horse File weight",(() => { const hw = hfWeight({pid:last.pid||PAT.pid, name:last.name||PAT.name}); return hw ? hw.kg + " kg" + (hw.date ? " · " + dshow(hw.date) : "") : ""; })()],["Visits",String(vs.length)]].filter(r => r[1]);
   main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Patient record – ${esc(title)}</h2>${(last.pid||PAT.pid) ? `<span class="pill p-n">ID ${esc(last.pid||PAT.pid)}</span>` : ""}<span class="spacer"></span>
-      <button id="pBack">← History</button><button id="pNew">+ New prescription</button><button type="button" id="pHf" data-href="${esc(hfLink(last.pid||PAT.pid, last.name||PAT.name))}">🐴 Horse File</button><button id="pPrint">🖨 Print record</button><button class="pri" id="pPdf">⬇ Save as PDF</button></div>
+      <button id="pBack">← History</button><button id="pNew">+ New prescription</button><button type="button" id="pHf" data-href="${esc(hfLink(last.pid||PAT.pid, (hr && hr.name) || last.name||PAT.name))}">🐴 Horse File</button>${hfl.length ? `<button type="button" id="pHfR" data-href="${esc(hfLink(last.pid||PAT.pid, (hr && hr.name) || last.name||PAT.name))}&recs=1">📂 Saved Horse Files (${hfl.length})</button>` : ""}<button id="pPrint">🖨 Print record</button><button class="pri" id="pPdf">⬇ Save as PDF</button></div>
       <div class="kv">${info.map(r => `<div>${esc(r[0])}</div><div>${esc(r[1])}</div>`).join("")}</div>
       <p class="small muted">All visits for this horse, newest first. <b>Print record / Save as PDF</b> gives the full record (notes, investigations, photos, vaccination and deworming); each visit also has its own <b>Print / PDF this visit</b>.</p></div>
     <div class="panel" id="pPrev"></div>
@@ -1246,11 +1270,8 @@ function renderPatient(main){
       <h3>Photos &amp; videos</h3><div class="photos" id="pm_${esc(v._id)}"><p class="small muted">Loading…</p></div>
       <div style="margin-top:8px">${mediaPicker("pv_" + v._id)}</div></div>`).join("") || `<div class="panel"><p class="muted">No visits found for this horse.</p></div>`}`;
   $("#pBack").onclick = () => { location.hash = "#history"; };
-  { const hb = $("#pHf"); if (hb) hb.onclick = () => { location.href = hb.dataset.href; }; }
-  $("#pNew").onclick = () => { const go = () => { Object.keys(RX).forEach(k => delete RX[k]);
-      Object.assign(RX, newRx(), {status:"Old", pid:last.pid||PAT.pid, name:last.name||PAT.name, sex:last.sex||"", breed:last.breed||"", birth:last.birth||"", type:last.type||"Adult", bwt:(() => { const hw = hfWeight({pid:last.pid||PAT.pid, name:last.name||PAT.name}); return hw && (!last.bwt || (hw.date||"") >= (last.date||"")) ? hw.kg : (last.bwt||""); })()});
-      PEND = []; saveDraft(); location.hash = "#rx"; };
-    if (RX.name || RX.complaint || RX.lines.some(l => l.med)) confirmBox("Start a new prescription for this horse? The current form will be replaced.", go); else go(); };
+  { const hb = $("#pHf"); if (hb) hb.onclick = () => { location.href = hb.dataset.href; }; const hr2 = $("#pHfR"); if (hr2) hr2.onclick = () => { location.href = hr2.dataset.href; }; }
+  $("#pNew").onclick = () => startRxFor(last.pid||PAT.pid, last.name||PAT.name||(hr && hr.name)||"");
   const getMedia = async () => { const miss = vs.filter(v => !PMEDIA[v._id]).map(v => v._id); if (miss.length) Object.assign(PMEDIA, await loadMedia(miss)); return PMEDIA; };
   const nm = `Record_${String(title).replace(/[^\w-]+/g,"_")}_${today()}`;
   $("#pPrint").onclick = async () => { const w = window.open("", "_blank"); const html = docPage(nm, recordInner(vs, await getMedia()));
@@ -1376,8 +1397,7 @@ function editPrev(kind, r, preset){
 }
 function patPrev(){
   if (!PAT) return [];
-  const id = PAT.pid.toLowerCase(), nm = PAT.name.toLowerCase();
-  return S.preventive.filter(r => (id && (r.pid||"").trim().toLowerCase() === id) || (nm && (r.name||"").trim().toLowerCase() === nm)).sort((a,b) => (b.given||"").localeCompare(a.given||""));
+  return S.preventive.filter(r => ofHorse(PAT, r)).sort((a,b) => (b.given||"").localeCompare(a.given||""));
 }
 function drawPatPrev(last){
   const box = $("#pPrev"); if (!box) return;
@@ -1427,7 +1447,36 @@ const hk = s => String(s || "").trim().toLowerCase();
 function sameHorse(a, b){ if (!a || !b) return false; if (hk(a.pid) && hk(b.pid)) return hk(a.pid) === hk(b.pid); return !!hk(a.name) && hk(a.name) === hk(b.name); }
 const slug = s => String(s || "horse").replace(/[^\w-]+/g, "_");
 // Horse File page (horse-file.html) keeps one record per horse in "horses" – body weight is shared with prescriptions
-const horseRec = p => (S.horses || []).find(h => sameHorse(h, p)) || null;
+// horse-list record (Arabic + English name) – matches a visit/patient by ID, Arabic name or English name
+const hNames = h => [h && h.name, h && h.nameEn].filter(Boolean).map(hk);
+function hMatch(h, p){ if (!h || !p) return false; if (hk(h.pid) && hk(p.pid)) return hk(h.pid) === hk(p.pid); const n = hk(p.name); return !!n && hNames(h).includes(n); }
+const horseRec = p => (S.horses || []).find(h => hMatch(h, p)) || null;
+const aliasNames = p => { const h = horseRec(p); return [...new Set([hk(p.name), ...(h ? hNames(h) : [])].filter(Boolean))]; };
+const ofHorse = (p, x) => (hk(p.pid) && hk(x.pid) === hk(p.pid)) || aliasNames(p).includes(hk(x.name));
+const hFiles = p => { const h = horseRec(p); return (S.horseFiles || []).filter(r => r.status !== "draft" && ((h && r.key === h._id) || ofHorse(p, r) || (r.nameEn && aliasNames(p).includes(hk(r.nameEn))))); };
+const sexFromList = s => { const t = String(s || "").toLowerCase(), list = L().sexes || [], pick = (...c) => c.find(x => list.includes(x)) || c[0];
+  if (/stallion|فحل/.test(t)) return pick("Stallion","Male"); if (/geld|حصان/.test(t)) return pick("Geld","Gelding","Male");
+  if (/colt|فلو(?!ه)/.test(t)) return pick("Male"); if (/mare|filly|فرس|مهره|فلوه/.test(t)) return pick("Female"); return ""; };
+// everything we know about a horse, in prescription fields (only non-empty values)
+function rxFillData(p, pv, hr, hw){
+  const last = pv[0] || {}, f = (hr && hr.file) || {}, out = {};
+  const put = (k, v) => { if (v !== undefined && v !== null && String(v).trim() !== "") out[k] = String(v); };
+  put("pid", p.pid || last.pid || (hr && hr.pid)); put("name", p.name || last.name || (hr && hr.name));
+  put("sex", last.sex || sexFromList(hr && (hr.sex || f.sex)));
+  put("breed", last.breed || String((hr && (hr.breed || f.breed)) || "").split(" / ")[0]);
+  const by = hr && (hr.birthYear || f.birthYear); put("birth", last.birth || (/^\d{4}$/.test(String(by || "")) ? by + "-01-01" : ""));
+  if (last.type) put("type", last.type);
+  put("bwt", hw && (!last.bwt || (hw.date || "") >= (last.date || "")) ? hw.kg : last.bwt);
+  if (pv.length || hr) out.status = "Old";
+  return out;
+}
+function startRxFor(pid, name){
+  const p = {pid:(pid||"").trim(), name:(name||"").trim()};
+  const pv = S.visits.filter(v => ofHorse(p, v)).sort((a,b) => (b.date||"").localeCompare(a.date||""));
+  const go = () => { Object.keys(RX).forEach(k => delete RX[k]); Object.assign(RX, newRx(), rxFillData(p, pv, horseRec(p), hfWeight(p)));
+    PEND = []; saveDraft(); if (location.hash === "#rx") render(true); else location.hash = "#rx"; toast("Horse details filled – check them before saving."); };
+  if (RX.name || RX.complaint || RX.lines.some(l => l.med)) confirmBox("Start a new prescription for this horse? The current form will be replaced.", go); else go();
+}
 const hfWeight = p => { const h = horseRec(p); return h && N(h.weightKg) !== null ? {kg: String(h.weightKg), date: h.weightDate || "", method: h.weightMethod || ""} : null; };
 const hfLink = (pid, name) => `horse-file.html?${new URLSearchParams(Object.assign({}, pid ? {pid} : {}, name ? {name} : {})).toString()}`;
 const vaccMonths = () => N(ST().vaccMonths) ?? 12;
@@ -1687,22 +1736,34 @@ function gsSearch(raw){
   const q = hk(raw).split(/\s+/).filter(Boolean); if (!q.length) return [];
   const has = (...f) => { const s = f.map(x => String(x ?? "")).join(" ").toLowerCase(); return q.every(w => s.includes(w)); };
   const out = [], add = (group, label, sub, act) => out.push({group, label, sub, act});
-  // horses
+  // horses (horse list + every horse with visits, vaccinations or notes)
   const H = new Map();
-  [...S.visits, ...S.preventive, ...S.notes].forEach(x => { const k = hk(x.name) || hk(x.pid); if (!k) return;
-    const h = H.get(k) || {pid:"", name:"", breed:"", n:0, last:""}; if (x.pid) h.pid = x.pid; if (x.name) h.name = x.name; if (x.breed) h.breed = x.breed;
+  const hkey = x => { const h = horseRec(x); return h ? "h:" + h._id : (hk(x.name) || hk(x.pid)); };
+  (S.horses || []).forEach(h => H.set("h:" + h._id, {pid:h.pid||"", name:h.name||"", nameEn:h.nameEn||"", breed:h.breed||"", cat:h.category||"", sex:h.sex||"", n:0, last:""}));
+  [...S.visits, ...S.preventive, ...S.notes].forEach(x => { const k = hkey(x); if (!k) return;
+    const h = H.get(k) || {pid:"", name:"", nameEn:"", breed:"", cat:"", sex:"", n:0, last:""}; if (x.pid && !h.pid) h.pid = x.pid; if (x.name && !h.name) h.name = x.name; if (x.breed && !h.breed) h.breed = x.breed;
     if (x.createdAt !== undefined || x.td !== undefined) { h.n++; if ((x.date||"") > h.last) h.last = x.date || ""; } H.set(k, h); });
-  [...H.values()].filter(h => has(h.name, h.pid, h.breed)).sort((a,b) => (b.last||"").localeCompare(a.last||"")).slice(0, 6)
-    .forEach(h => add("Horses", h.name || h.pid, [h.pid && "ID " + h.pid, h.breed, `${h.n} visit(s)`, h.last && "last " + dshow(h.last)].filter(Boolean).join(" · "), () => openPatient(h.pid, h.name)));
+  const exactH = h => [h.name, h.nameEn, h.pid].some(x => hk(x) === hk(raw));
+  const hs = [...H.values()].filter(h => has(h.name, h.nameEn, h.pid, h.breed, h.cat)).sort((a,b) => exactH(b) - exactH(a) || (b.last||"").localeCompare(a.last||""));
+  hs.slice(0, 6).forEach(h => add("Horses", [h.name, h.nameEn].filter(Boolean).join(" / ") || h.pid, [h.pid && "ID " + h.pid, h.sex, h.breed, h.cat, `${h.n} visit(s)`, h.last && "last " + dshow(h.last)].filter(Boolean).join(" · "), () => openPatient(h.pid, h.name || h.nameEn)));
+  if (hs.length && (hs.length === 1 || exactH(hs[0]))) { // one horse → link everything about it
+    const h = hs[0], p = {pid:h.pid, name:h.name || h.nameEn}, g = `Everything for ${[h.name, h.nameEn].filter(Boolean).join(" / ") || h.pid}`;
+    const nv = S.visits.filter(v => ofHorse(p, v)).length, np = S.preventive.filter(r => ofHorse(p, r)).length, nn = S.notes.filter(n => ofHorse(p, n)).length, nf = hFiles(p).length;
+    add(g, "📋 Full patient record", `${nv} visit(s) · ${np} vaccination/deworming · ${nn} note(s) – print or save as PDF`, () => openPatient(h.pid, p.name));
+    add(g, "🐴 Horse File / الملف الشامل", "Comprehensive file – weight, shoeing, vitals, vaccinations, treatment plan", () => { location.href = hfLink(h.pid, h.name || h.nameEn); });
+    if (nf) add(g, `📂 Saved Horse Files (${nf})`, "Open, print or download a saved file", () => { location.href = hfLink(h.pid, h.name || h.nameEn) + "&recs=1"; });
+    add(g, "➕ New prescription for this horse", "Fills ID, name, sex, breed, birth date and body weight", () => startRxFor(h.pid, h.name || h.nameEn));
+  }
+  const al = x => { const h = horseRec(x); return h ? [h.name, h.nameEn, h.pid] : []; };
   // visits
-  S.visits.filter(v => has(v.name, v.pid, v.td, v.complaint, v.rx, v.invest, v.notes, v.disease, v.advice, v.date, dshow(v.date), ...linkedPrev(v).map(p => p.drug)))
+  S.visits.filter(v => has(v.name, v.pid, ...al(v), v.td, v.complaint, v.rx, v.invest, v.notes, v.disease, v.advice, v.date, dshow(v.date), ...linkedPrev(v).map(p => p.drug)))
     .sort((a,b) => (b.date||"").localeCompare(a.date||"")).slice(0, 8)
     .forEach(v => add("Visits & treatments", `${dshow(v.date)} – ${v.name || v.pid || ""}${v.td ? " – " + v.td : ""}`, gsSnip([v.td, v.complaint, v.rx, v.invest, v.notes, v.disease, v.advice, linkedPrev(v).map(p => p.drug).join(", ")], q) || v.rx || "", () => openVisit(v._id)));
   // vaccination & deworming
-  S.preventive.filter(r => has(r.name, r.pid, r.drug, r.note, KLAB[r.kind])).sort((a,b) => (b.given||"").localeCompare(a.given||"")).slice(0, 6)
+  S.preventive.filter(r => has(r.name, r.pid, ...al(r), r.drug, r.note, KLAB[r.kind])).sort((a,b) => (b.given||"").localeCompare(a.given||"")).slice(0, 6)
     .forEach(r => add("Vaccination & deworming", `${KLAB[r.kind] || ""}: ${r.drug || ""}`, `${r.name || r.pid || ""} · given ${r.given ? dshow(r.given) : "–"}${r.next ? " · next " + dshow(r.next) : ""}`, () => editPrev(r.kind, r)));
   // notes
-  S.notes.filter(n => has(n.title, n.text, n.name, n.pid)).slice(0, 6)
+  S.notes.filter(n => has(n.title, n.text, n.name, n.pid, ...al(n))).slice(0, 6)
     .forEach(n => add("Notes", n.title || String(n.text || "").slice(0, 70) || "Note", [n.name, gsSnip([n.text], q), n.done ? "done" : n.due ? "due " + dshow(n.due) : ""].filter(Boolean).join(" · "), () => editClinicNote(n._id)));
   // medicines
   S.meds.filter(m => has(m.name, m.type, m.composition, m.function, m.indication, m.route)).sort((a,b) => (a.name||"").localeCompare(b.name||"")).slice(0, 6)
@@ -2245,6 +2306,7 @@ bindGlobalSearch();
 function startData(){
   ["meds","doses","stock","visits","drafts","medimg","preventive","notes","horses"].forEach(k => sub(k, k));
   sub("dchunks","dchunks"); subDoc("config/lists","lists"); subDoc("config/settings","settings");
+  try { db.collection("horseFiles").onSnapshot(snap => { S.horseFiles = snap.docs.map(d => Object.assign({_id:d.id}, d.data())); onData(); }, e => { S.horseFiles = []; }); } catch(e){} // saved Horse File records (optional)
 }
 function loginPanel(msg){
   $("#main").innerHTML = `<div class="panel" style="max-width:440px;margin:30px auto"><h2>Sign in</h2>

@@ -50,6 +50,33 @@
   .box .row{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
   .box button{padding:8px 12px;border:0;border-radius:4px;cursor:pointer;font-weight:bold}
   .b-rep{background:#8b5cf6;color:#fff}.b-imp{background:#0ea5e9;color:#fff}.b-formx{background:#14b8a6;color:#fff}
+  [hidden]{display:none!important}
+  /* v3 – English and Arabic side by side */
+  .bi:not(th):not(td){display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .bi .ar,.ar{direction:rtl;unicode-bidi:isolate;font-family:Tahoma,Arial,sans-serif}
+  .f label.bi .ar{font-weight:bold;color:#333}
+  section h2.bi .ar{color:#fff}
+  th.bi .ar,td.bi .ar{float:inline-end;margin-inline-start:8px}
+  .b-draft{background:#64748b;color:#fff}.b-list{background:#0f766e;color:#fff}.b-recs{background:#7c3aed;color:#fff}
+  .openbar{max-width:1000px;margin:14px auto 0;background:#fff;border:2px solid #3b82f6;border-radius:8px;padding:12px 16px}
+  .openbar .row,.found .row,.rowx{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+  .openbar input{flex:1 1 260px;padding:8px;border:1px solid var(--line);border-radius:4px;font:inherit}
+  .openbar button,.actions button,.found button,.lv button{padding:8px 12px;border:0;border-radius:4px;cursor:pointer;font-weight:bold}
+  .found{margin-top:10px;background:#f0f7ff;border:1px solid #93c5fd;border-radius:6px;padding:10px}
+  .found.none{background:#fff7ed;border-color:#fdba74}.found.ok{background:#ecfdf5;border-color:#6ee7b7}
+  .found table.av{width:100%;margin:6px 0 0}.found table.av td{padding:3px 6px;border:1px solid #cbd5e1;background:#fff}
+  .found table.av td:first-child{width:45%;font-weight:bold;background:#f8fafc}
+  .actions{max-width:1000px;margin:0 auto 24px;display:flex;flex-wrap:wrap;gap:10px;justify-content:center;background:#fff;padding:12px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.15)}
+  .actions button{padding:11px 18px;font-size:14px}
+  .box.wide{width:min(900px,96vw);max-height:88vh;overflow:auto}
+  .reclist table{width:100%;margin:8px 0 0}.reclist td{padding:4px 6px;font-size:12px}
+  .reclist td button{padding:4px 8px;margin:1px;font-size:12px}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:bold}
+  .p-dr{background:#e2e8f0;color:#334155}.p-fi{background:#dcfce7;color:#166534}
+  .lv table{width:100%;margin:6px 0}.lv td{padding:4px 6px;font-size:12px}.lv tbody tr{cursor:pointer}.lv tbody tr:hover td{outline:1px solid #3b82f6}
+  .lv h2{margin:14px 0 6px;font-size:16px}.lv .sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .lv .sum table{margin:0;width:100%}.lv .legend span{display:inline-block;padding:2px 8px;margin:2px;border:1px solid #bbb;border-radius:4px;font-size:12px}
+  @media print{.lv tbody tr{cursor:default}}
   @media print{
     @page{size:A4;margin:8mm}
     body{background:#fff;font-size:10.5px}
@@ -73,6 +100,8 @@
   <button class="b-imp" id="btnImport">📄 Import horse list / استيراد الكشف</button><input type="file" id="impFile" accept=".xlsx,.xls" hidden>
   <button class="b-rep" id="btnReports">📥 Reports / التقارير</button>
   <button class="b-print" onclick="window.print()">🖨 Print / طباعة</button>
+  <button class="b-list" id="btnList">📋 Horse List / كشف الخيل</button>
+  <button class="b-recs" id="btnRecs">📂 Saved records / السجلات</button>
   <button class="b-clear" id="btnClear">New / جديد</button>
   <span id="status">Manual mode / إدخال يدوي</span>
 </div>
@@ -91,6 +120,25 @@
   <div class="row"><button id="repCancel">Close / إغلاق</button><button class="b-save" id="repGo">⬇ Download Excel / تحميل</button></div>
 </div></div>
 
+<div class="modal noprint" id="recModal"><div class="box wide">
+  <h3>Saved records / السجلات المحفوظة</h3>
+  <div class="rowx"><input id="recQ" placeholder="Filter by ID or name / تصفية بالرقم أو الاسم" style="flex:1 1 240px;padding:7px;border:1px solid #999;border-radius:4px">
+    <label style="display:inline-flex;gap:4px;align-items:center;padding:0"><input type="checkbox" id="recDr" checked> Show drafts / إظهار المسودات</label></div>
+  <div id="recList" class="reclist"></div>
+  <div class="row"><button id="recClose">Close / إغلاق</button></div>
+</div></div>
+
+<div class="openbar noprint" id="openBar">
+  <div class="bi bilang-h"><b>Import available data from the site – type the Patient ID or horse name</b><b class="ar">استيراد البيانات المتوفرة من الموقع – اكتب رقم المريض أو اسم الحصان</b></div>
+  <div class="row"><input id="openQ" list="horseList" placeholder="Patient ID or Name (Arabic or English) / رقم أو اسم الحصان">
+    <button class="b-load" id="openGo">🔍 Find & import / بحث واستيراد</button>
+    <button class="b-list" id="openList">📋 Horse List / كشف الخيل</button>
+    <button class="b-recs" id="openRecs">📂 Saved records / السجلات</button></div>
+  <div id="openRes"></div>
+</div>
+
+<div class="page lv" id="listView" hidden></div>
+
 <div class="page" id="form">
   <div class="head"><span>Kuwait Army Equestrian Team</span><span>مديرية الاتحاد الرياضي العسكري</span></div>
   <h1>الملف الشامل للخيل - مع تاريخ التحذية</h1>
@@ -102,7 +150,7 @@
       <div class="f"><label>Horse Name / <span class="ar">اسم الحصان</span></label><input data-k="name"></div>
       <div class="f"><label>Microchip No. / <span class="ar">رقم الشريحة</span></label><input data-k="microchip"></div>
       <div class="f"><label>Military No. / <span class="ar">الرقم العسكري</span></label><input data-k="militaryNo"></div>
-      <div class="f"><label>Name (English)</label><input data-k="nameEn"></div>
+      <div class="f"><label>Name (English) / <span class="ar">الاسم بالإنجليزية</span></label><input data-k="nameEn"></div>
       <div class="f"><label>Birth Year / <span class="ar">مواليد الخيل</span></label><input type="number" data-k="birthYear" id="bYear"></div>
       <div class="f"><label>Age / <span class="ar">العمر</span></label><input data-k="age" id="age"></div>
       <div class="f"><label>Sex / <span class="ar">الجنس</span></label><input data-k="sex" list="sexList"><datalist id="sexList"><option>فرس / Mare</option><option>حصان / Gelding</option><option>فحل / Stallion</option><option>مهره / Filly</option><option>فلو / Colt foal</option><option>فلوه / Filly foal</option><option>بوني فحل / Pony stallion</option><option>بوني فرس / Pony mare</option></datalist></div>
@@ -207,6 +255,14 @@
   </section>
 </div>
 
+<div class="actions noprint" id="actions">
+  <button class="b-draft" id="btnDraftB">📝 Save draft / حفظ مسودة</button>
+  <button class="b-save" id="btnSaveB">💾 Save / حفظ</button>
+  <button class="b-print" id="btnPrintB">🖨 Print / طباعة</button>
+  <button class="b-recs" id="btnRecsB">📂 Saved records / السجلات المحفوظة</button>
+  <div class="hint" id="saveInfo" style="flex-basis:100%;text-align:center"></div>
+</div>
+
 <script src="firebase-config.js"></script>
 <script type="module">
 /* ================================================================
@@ -289,7 +345,7 @@ function setForm(d={}){
 }
 $("#btnClear").onclick=()=>{ if(!confirm("Clear the form? / مسح النموذج؟"))return;
   document.querySelectorAll("[data-k],[data-v]").forEach(el=>{ if(!["div","kf"].includes(el.id)) el.value=""; });
-  $("#div").value=300; $("#kf").value=2.2; $("#fileDate").value=today(); window._siteRec=null; CUR=null; resetTreat(); calcWeight(); calcShoe(); calcVitals(); };
+  $("#div").value=300; $("#kf").value=2.2; $("#fileDate").value=today(); window._siteRec=null; CUR=null; LOADED=null; $("#openRes").innerHTML=""; $("#saveInfo").textContent=""; resetTreat(); calcWeight(); calcShoe(); calcVitals(); };
 
 /* ---------- DATA: your site's Firebase (same login), or this browser only ---------- */
 let db=null, ONLINE=false;
@@ -297,6 +353,8 @@ const LS={ get:k=>{try{return JSON.parse(localStorage.getItem(k)||"{}")}catch(e)
 const loadScript=src=>new Promise((ok,no)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s);});
 const hk = s => String(s ?? "").trim().toLowerCase();
 const sameHorse=(a,b)=>{ if(!a||!b) return false; if(hk(a.pid)&&hk(b.pid)) return hk(a.pid)===hk(b.pid); return !!hk(a.name)&&hk(a.name)===hk(b.name); };
+// record r belongs to horse h – also matches when the record uses the English name
+const isHorse=(r,h)=>{ if(!r||!h) return false; if(sameHorse(r,h)) return true; if(hk(r.pid)&&hk(h.pid)) return false; const n=hk(r.name); return !!n && [h.name,h.nameEn].some(x=>hk(x)===n); };
 async function connect(){
   const cfg=window.FIREBASE_CONFIG;
   if(!(cfg&&cfg.apiKey)){ status("Browser mode – saved in this browser only / وضع المتصفح"); return; }
@@ -309,7 +367,7 @@ async function connect(){
     if(!user){ status("Not signed in / غير مسجل الدخول");
       document.querySelector("#form").insertAdjacentHTML("afterbegin",`<div class="noprint" style="background:#fee2e2;border:1px solid #f87171;padding:10px;border-radius:6px;margin-bottom:10px"><b>Please sign in first / يرجى تسجيل الدخول أولاً:</b> open <a href="index.html">the clinic page</a>, sign in, then come back to this page.</div>`);
       return; }
-    db=firebase.firestore(); ONLINE=true; status(`Signed in · ${user.email||""} / تم تسجيل الدخول`);
+    db=firebase.firestore(); ONLINE=true; window._user=user.email||""; status(`Signed in · ${user.email||""} / تم تسجيل الدخول`);
   }catch(e){ console.error(e); status("Could not connect – browser mode / تعذر الاتصال"); }
 }
 await connect();
@@ -331,7 +389,8 @@ const store={
     const c=db.collection(coll);
     if(h.pid){ add(await c.where("pid","==",String(h.pid)).get()); }
     if(h.name){ add(await c.where("name","==",String(h.name)).get()); }
-    return [...out.values()].filter(r=>sameHorse({pid:r.pid,name:r.name},h)||(!r.pid&&hk(r.name)===hk(h.name)));
+    if(h.nameEn && hk(h.nameEn)!==hk(h.name)){ add(await c.where("name","==",String(h.nameEn)).get()); }
+    return [...out.values()].filter(r=>isHorse({pid:r.pid,name:r.name},h));
   }
 };
 
@@ -339,14 +398,14 @@ const store={
 async function horseIndex(visits){
   const list=(await store.horses()).map(e=>({key:e.key,...e.data,pid:e.data.pid||"",name:e.data.name||""}));
   (visits||[]).forEach(v=>{ if(!v.name&&!v.pid) return;
-    if(!list.some(h=>sameHorse(h,v) || (h.name && hk(h.name)===hk(v.name)))) list.push({key:null,pid:v.pid||"",name:v.name||"",fromVisits:true}); });
+    if(!list.some(h=>isHorse(v,h))) list.push({key:null,pid:v.pid||"",name:v.name||"",fromVisits:true}); });
   return list;
 }
 function findHorse(list,q){ q=hk(q); if(!q) return null;
   return list.find(h=>hk(h.pid)===q) || list.find(h=>[h.name,h.nameEn,`${h.name} / ${h.nameEn}`].some(x=>hk(x)===q)) || null; }
 async function refreshPicker(){
   try{ const visits=ONLINE? await store.all(SETTINGS.visits):[]; const L=await horseIndex(visits);
-    $("#horseList").innerHTML=L.map(h=>`<option value="${esc(h.name||h.pid)}">${esc([h.pid,h.nameEn].filter(Boolean).join(" – "))}</option>`).join("");
+    $("#horseList").innerHTML=L.map(h=>`<option value="${esc(h.name||h.pid)}">${esc([h.pid,h.nameEn].filter(Boolean).join(" – "))}</option>`+(h.nameEn&&h.nameEn!==h.name?`<option value="${esc(h.nameEn)}">${esc([h.pid,h.name].filter(Boolean).join(" – "))}</option>`:"")).join("");
     if(L.length) status(`${ONLINE?"Signed in":"Browser mode"} – ${L.length} horses / خيل`);
   }catch(e){ console.error(e); }
 }
@@ -420,50 +479,316 @@ $("#impFile").onchange=async ev=>{
       const ex=list.find(e=>(pid&&hk(e.data.pid)===hk(pid))||hk(e.data.name)===hk(ar)||(g("en")&&hk(e.data.nameEn)===hk(g("en"))));
       if(ex){ await store.saveHorse(ex.key,fields); updated++; } else { await store.saveHorse(pid||ar,{pid:pid||"",...fields}); added++; }
     }
-    await refreshPicker();
+    await refreshPicker(); if(LIST_ON) showList();
     status(`Imported: ${added} new, ${updated} updated / تم الاستيراد`);
     alert(`Horse list imported / تم استيراد الكشف\nNew / جديد: ${added}\nUpdated / تحديث: ${updated}`);
   }catch(e){ console.error(e); alert("Import failed / فشل الاستيراد: "+e.message); status("Import failed"); }
 };
 
-/* ---------- collect one horse ---------- */
-let CUR=null; // the horse being edited
-async function collect(q){
-  status("Collecting… / جاري الجمع");
+let CUR=null;    // the horse being edited
+let LOADED=null; // saved record currently open
+function toDate(v){ if(!v) return ""; if(v.toDate) v=v.toDate(); const d=new Date(v); return isNaN(d)?String(v):d.toISOString().slice(0,10); }
+/* ================================================================
+   v3 – English | Arabic side by side
+   ================================================================ */
+const AR=/[؀-ۿ]/;
+const escT=s=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+function biSplit(el){
+  if(el.dataset.bi) return;
+  const sp=[...el.children].find(c=>c.classList.contains("ar"));
+  if(sp){ // "English / <span class=ar>Arabic</span>"
+    const en=document.createElement("span"); en.className="en";
+    while(el.firstChild && el.firstChild!==sp) en.appendChild(el.firstChild);
+    const t=en.lastChild; if(t && t.nodeType===3) t.textContent=t.textContent.replace(/\s*\/\s*$/,"");
+    el.insertBefore(en,sp); el.classList.add("bi"); el.dataset.bi="1"; return;
+  }
+  if(el.children.length) return;
+  const parts=el.textContent.split(" / "); if(parts.length<2) return;
+  for(let k=1;k<parts.length;k++){
+    const L=parts.slice(0,k).join(" / "), R=parts.slice(k).join(" / ");
+    if(!AR.test(L) && AR.test(R)){ el.innerHTML=`<span class="en">${escT(L)}</span><span class="ar">${escT(R)}</span>`; el.classList.add("bi"); el.dataset.bi="1"; return; }
+  }
+}
+function bilingual(root=document){ root.querySelectorAll(".f > label, section > h2, th, td.lab, .box > h3, .bilang").forEach(biSplit); }
+bilingual();
+
+/* ================================================================
+   v3 – saved records (drafts + saved files) in collection "horseFiles"
+   ================================================================ */
+const REC="horseFiles";
+const docId=s=>String(s||"").replace(/[\/.#\[\]]/g,"-").trim().slice(0,120)||("horse_"+Date.now());
+const recStore={
+  async list(){
+    if(ONLINE){ const s=await db.collection(REC).get(); return s.docs.map(d=>({_id:d.id,...d.data()})); }
+    return Object.entries(LS.get("mec_horsefiles")).map(([k,d])=>({_id:k,...d}));
+  },
+  async put(id,rec){ // id null → new record
+    if(ONLINE){ if(id) return db.collection(REC).doc(id).set(rec); return db.collection(REC).add(rec); }
+    const a=LS.get("mec_horsefiles"); a[id||("r"+Date.now().toString(36))]=rec; LS.set("mec_horsefiles",a);
+  },
+  async del(id){
+    if(ONLINE) return db.collection(REC).doc(id).delete();
+    const a=LS.get("mec_horsefiles"); delete a[id]; LS.set("mec_horsefiles",a);
+  }
+};
+const recOfHorse=(r,h)=> (h.key && r.key===h.key) || isHorse({pid:r.pid,name:r.name},h) || (!!r.nameEn && [h.name,h.nameEn].some(x=>hk(x)===hk(r.nameEn)));
+const byNewest=(a,b)=>(b.savedAt||"").localeCompare(a.savedAt||"");
+const when=s=>String(s||"").slice(0,16).replace("T"," ");
+const permHint=e=>/permission|insufficient/i.test(String(e&&(e.code||e.message)))
+  ? "\n\nYour Firebase rules do not allow the new \"horseFiles\" collection yet – add it in Firebase › Firestore › Rules (same rule as \"horses\").\nقواعد Firebase لا تسمح بحفظ السجلات بعد" : "";
+
+function formHasData(){
+  return [...document.querySelectorAll("[data-k],[data-v]")].some(el=>el.value && !el.readOnly && !["div","kf","fileDate"].includes(el.id))
+      || [...$("#treat tbody").querySelectorAll("input")].some(i=>i.value);
+}
+function clearForm(){
+  document.querySelectorAll("[data-k],[data-v]").forEach(el=>{ if(!["div","kf"].includes(el.id)) el.value=""; });
+  $("#div").value=300; $("#kf").value=2.2; resetTreat(); window._siteRec=null;
+}
+function applyData(f,mode){
+  if(mode==="all"){ clearForm(); setForm(f); }
+  else {
+    document.querySelectorAll("[data-k]").forEach(el=>{ const v=f[el.dataset.k]; if(!el.readOnly && !el.value && v!=null && v!=="") el.value=v; });
+    if(f.vacc) document.querySelectorAll("[data-v]").forEach(el=>{ if(!el.value && f.vacc[el.dataset.v]) el.value=f.vacc[el.dataset.v]; });
+    const hasT=[...$("#treat tbody").querySelectorAll("input")].some(i=>i.value);
+    if(!hasT && f.treatment && f.treatment.length) resetTreat(f.treatment);
+  }
+  if(!$("#fileDate").value) $("#fileDate").value=today();
+  window._siteRec=f._weight||null; calcWeight(); calcShoe(); calcVitals();
+}
+
+/* ---------- find a horse by ID / name and offer to import ---------- */
+function matchHorses(list,q){
+  q=hk(q); if(!q) return [];
+  const exact=list.filter(h=>[h.pid,h.name,h.nameEn,`${h.name} / ${h.nameEn}`].some(x=>hk(x)===q));
+  if(exact.length) return exact;
+  const byNo=list.filter(h=>hk(h.listNo)===q); if(byNo.length) return byNo;
+  return list.filter(h=>[h.pid,h.name,h.nameEn].some(x=>hk(x).includes(q))).slice(0,15);
+}
+async function gather(h){
+  const [vs,pv]=ONLINE? await Promise.all([store.forHorse(SETTINGS.visits,h),store.forHorse(SETTINGS.preventive,h)]) : [[],[]];
+  let recs=[]; try{ recs=(await recStore.list()).filter(r=>recOfHorse(r,h)); }catch(e){ console.warn(e); }
+  return {h,vs,pv,recs,f:assemble(h,vs,pv)};
+}
+async function findAndOffer(q){
+  q=String(q||"").trim(); const box=$("#openRes");
+  if(!q){ box.innerHTML=`<div class="found none">Type a Patient ID or horse name first / اكتب رقم أو اسم الحصان أولاً</div>`; return; }
+  box.innerHTML=`<div class="found">Searching… / جاري البحث</div>`;
   try{
     const visitsAll=ONLINE? await store.all(SETTINGS.visits):[];
-    const L=await horseIndex(visitsAll); const h=findHorse(L,q);
-    if(!h){ status("Not found / غير موجود"); return alert("Horse not found – import the horse list, or type the details and Save.\nالحصان غير موجود"); }
-    const [vs,pv]=ONLINE? await Promise.all([store.forHorse(SETTINGS.visits,h),store.forHorse(SETTINGS.preventive,h)]) : [[],[]];
-    const f=assemble(h,vs,pv);
-    document.querySelectorAll("[data-k],[data-v]").forEach(el=>{ if(!["div","kf"].includes(el.id)) el.value=""; });
-    resetTreat(); setForm(f); CUR=h;
-    window._siteRec = f._weight||null;
-    calcWeight(); calcShoe(); calcVitals();
-    status(`Collected: ${h.name||h.pid} – ${vs.length} prescription(s), ${pv.length} vaccination/deworming record(s) / تم الجمع`);
-  }catch(err){ console.error(err); status("Error – see console / خطأ"); alert(err.message); }
+    const M=matchHorses(await horseIndex(visitsAll),q);
+    if(!M.length){
+      box.innerHTML=`<div class="found none"><div class="bi"><b>No horse found for “${escT(q)}”</b><b class="ar">لم يتم العثور على حصان</b></div>
+        <div class="row"><button class="b-save" id="fNew">Start a new file with this name / بدء ملف جديد بهذا الاسم</button><button id="fCancel">Close / إغلاق</button></div></div>`;
+      $("#fNew").onclick=()=>{ if(formHasData() && !confirm("Clear the form and start a new file? / مسح النموذج وبدء ملف جديد؟")) return;
+        clearForm(); CUR=null; LOADED=null; $("#fileDate").value=today();
+        (AR.test(q)?$('[data-k="name"]'):/^\d+$/.test(q)?$('[data-k="patientId"]'):$('[data-k="nameEn"]')).value=q;
+        calcWeight(); box.innerHTML=""; status("New file / ملف جديد"); };
+      $("#fCancel").onclick=()=>box.innerHTML=""; return;
+    }
+    if(M.length>1){
+      box.innerHTML=`<div class="found"><div class="bi"><b>${M.length} horses match – pick one</b><b class="ar">عدة خيول مطابقة – اختر واحداً</b></div>
+        <div class="row">${M.map((h,i)=>`<button data-i="${i}">${escT([h.pid&&("ID "+h.pid),h.name,h.nameEn].filter(Boolean).join(" · "))}</button>`).join("")}</div></div>`;
+      box.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>offer(M[+b.dataset.i])); return;
+    }
+    await offer(M[0]);
+  }catch(e){ console.error(e); box.innerHTML=`<div class="found none">Error / خطأ: ${escT(e.message)}</div>`; }
 }
-$("#btnLoad").onclick=()=>{ const q=$("#pick").value.trim(); if(!q) return alert("Enter Patient ID or Name / أدخل رقم أو اسم الحصان"); collect(q); };
-function toDate(v){ if(!v) return ""; if(v.toDate) v=v.toDate(); const d=new Date(v); return isNaN(d)?String(v):d.toISOString().slice(0,10); }
+async function offer(h){
+  const box=$("#openRes"); box.innerHTML=`<div class="found">Collecting available data… / جاري جمع البيانات</div>`;
+  const {f,vs,pv,recs}=await gather(h);
+  const finals=recs.filter(r=>r.status!=="draft").sort(byNewest), draft=recs.filter(r=>r.status==="draft").sort(byNewest)[0];
+  const w=f._weight;
+  const rows=[
+    ["Horse list / كشف الخيل", h.key? [h.listNo&&("No. "+h.listNo), h.sex, h.birthYear&&("Born / مواليد "+h.birthYear), h.category].filter(Boolean).join(" · ")||"Yes / نعم" : "Not in list / غير موجود"],
+    ["Prescriptions / الوصفات", vs.length? `${vs.length} – last ${vs.map(v=>v.date||"").sort().pop()}` : "0"],
+    ["Vaccination & deworming / التطعيم والديدان", String(pv.length)],
+    ["Body weight / الوزن", w? `${w.kg} kg (${w.src}${w.date?", "+w.date:""})` : "Not available / غير متوفر"],
+    ["Saved horse files / ملفات محفوظة", finals.length? `${finals.length} – last ${when(finals[0].savedAt)}` : "0"],
+    ["Draft / مسودة", draft? when(draft.savedAt) : "—"]
+  ];
+  box.innerHTML=`<div class="found"><div class="bi"><b>Found / تم العثور: ${escT(h.nameEn||h.name||h.pid)}${h.pid?" · ID "+escT(h.pid):""}</b><b class="ar">${escT(h.name||"")}</b></div>
+    <table class="av">${rows.map(r=>`<tr><td>${escT(r[0])}</td><td>${escT(r[1])}</td></tr>`).join("")}</table>
+    <div class="hint" style="padding:6px 0 0">Fill the form with this data? / تعبئة النموذج بهذه البيانات؟</div>
+    <div class="row">
+      <button class="b-save" data-a="all">✔ Fill all / تعبئة الكل</button>
+      <button class="b-load" data-a="empty">Fill empty fields only / تعبئة الحقول الفارغة فقط</button>
+      ${finals.length?`<button class="b-recs" data-a="last">Open last saved file / فتح آخر ملف محفوظ</button>`:""}
+      ${draft?`<button class="b-draft" data-a="draft">Open draft / فتح المسودة</button>`:""}
+      ${recs.length?`<button data-a="recs">All records (${recs.length}) / كل السجلات</button>`:""}
+      <button data-a="cancel">Cancel / إلغاء</button></div></div>`;
+  box.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{
+    const a=b.dataset.a;
+    if(a==="cancel") return box.innerHTML="";
+    if(a==="last") return openRecord(finals[0]);
+    if(a==="draft") return openRecord(draft);
+    if(a==="recs") return showRecords(h.name||h.nameEn||h.pid);
+    if(a==="all" && formHasData() && !confirm("Replace everything on the form with the site data? / استبدال كل ما في النموذج ببيانات الموقع؟")) return;
+    applyData(f,a); CUR=h; LOADED=null;
+    box.innerHTML=`<div class="found ok">✔ ${a==="all"?"Filled / تمت التعبئة":"Empty fields filled / تمت تعبئة الحقول الفارغة"}: ${escT(h.name||"")} ${escT(h.nameEn||"")} – ${vs.length} prescription(s), ${pv.length} vaccination/deworming record(s). Check, then Save. / راجع ثم احفظ</div>`;
+    status(`Collected: ${h.name||h.pid} / تم الجمع`);
+  });
+}
 
-$("#btnSave").onclick = async ()=>{
+/* ---------- open / save / list records ---------- */
+function openRecord(r){
+  if(!r) return;
+  if(formHasData() && !confirm("Open this record? What is on the form now will be replaced. / فتح السجل؟ سيتم استبدال ما في النموذج")) return false;
+  clearForm(); setForm(r.data||{}); window._siteRec=null; calcWeight();
+  CUR={key:r.key,pid:r.pid,name:r.name,nameEn:r.nameEn}; LOADED={id:r._id,status:r.status,savedAt:r.savedAt};
+  $("#recModal").classList.remove("show"); $("#openRes").innerHTML="";
+  const t=`${r.status==="draft"?"Draft / مسودة":"Saved file / ملف محفوظ"} – ${r.name||r.nameEn||r.pid} – ${when(r.savedAt)}`;
+  status("Opened: "+t); $("#saveInfo").textContent="Opened / مفتوح: "+t; window.scrollTo({top:0,behavior:"smooth"});
+  return true;
+}
+async function saveFile(kind){ // "draft" | "final"
   const d=getForm();
-  if(!d.name && !d.patientId) return alert("Horse name or Patient ID is required / اسم الحصان أو رقمه مطلوب");
+  if(!d.name && !d.patientId && !d.nameEn) return alert("Horse name or Patient ID is required / اسم الحصان أو رقمه مطلوب");
   try{
     const L=await store.horses();
-    const ex=(CUR&&CUR.key&&L.find(e=>e.key===CUR.key)) || L.find(e=>(d.patientId&&hk(e.data.pid)===hk(d.patientId))||(d.name&&hk(e.data.name)===hk(d.name)));
-    const fields={file:d,updatedAt:new Date().toISOString()};
-    for(const k of ["name","nameEn","sex","breed","birthYear","source","category","listNotes","color","microchip","militaryNo","rider"]) if(d[k]) fields[k]=d[k];
-    if(d.patientId) fields.pid=d.patientId;
-    if(d.weightKg){ fields.weightKg=Number(d.weightKg); fields.weightDate=d.weightDate||today(); fields.weightMethod=d.manualKg?"manual":"tape formula"; }
-    await store.saveHorse(ex?ex.key:(d.patientId||d.name),fields);
-    CUR={...(CUR||{}),key:ex?ex.key:(d.patientId||d.name).replace(/\//g,"-"),pid:d.patientId,name:d.name};
+    const ex=(CUR&&CUR.key&&L.find(e=>e.key===CUR.key)) || L.find(e=>(d.patientId&&hk(e.data.pid)===hk(d.patientId))
+             || (d.name&&[e.data.name,e.data.nameEn].some(x=>hk(x)===hk(d.name))) || (d.nameEn&&hk(e.data.nameEn)===hk(d.nameEn)));
+    const key=ex?ex.key:docId(d.patientId||d.name||d.nameEn);
+    const now=new Date().toISOString();
+    const rec={key,pid:d.patientId||"",name:d.name||(ex&&ex.data.name)||"",nameEn:d.nameEn||(ex&&ex.data.nameEn)||"",status:kind,data:d,
+               fileDate:d.fileDate||"",vet:d.vet||"",weightKg:d.weightKg||"",savedAt:now,savedBy:window._user||""};
+    if(kind==="draft"){
+      await recStore.put("draft_"+docId(key),rec);
+      LOADED={id:"draft_"+docId(key),status:"draft",savedAt:now};
+      $("#saveInfo").textContent=`Draft saved / تم حفظ المسودة – ${when(now)}. Open it later from “Saved records”.`;
+      status("Draft saved / تم حفظ المسودة");
+    } else {
+      const fields={file:d,updatedAt:now};
+      for(const k of ["name","nameEn","sex","breed","birthYear","source","category","listNotes","color","microchip","militaryNo","rider"]) if(d[k]) fields[k]=d[k];
+      if(d.patientId) fields.pid=d.patientId;
+      if(d.weightKg){ fields.weightKg=Number(d.weightKg); fields.weightDate=d.weightDate||today(); fields.weightMethod=d.manualKg?"manual":"tape formula"; }
+      await store.saveHorse(key,fields);           // latest file + weight shared with prescriptions
+      await recStore.put(null,rec);                // permanent record (a new one each time you save)
+      try{ await recStore.del("draft_"+docId(key)); }catch(e){}
+      LOADED={status:"final",savedAt:now};
+      $("#saveInfo").textContent=`Saved as a record / تم الحفظ كسجل – ${when(now)}. Find it any time in “Saved records”.`;
+      status(ONLINE?"Saved – record kept, weight linked to prescriptions / تم الحفظ":"Saved in this browser / تم الحفظ في المتصفح");
+    }
+    CUR={...(CUR||{}),key,pid:d.patientId,name:rec.name,nameEn:rec.nameEn};
     await refreshPicker();
-    status(ONLINE?"Saved – weight linked to prescriptions / تم الحفظ وربط الوزن بالوصفة":"Saved in this browser / تم الحفظ في المتصفح");
-  }catch(err){ console.error(err); alert("Save failed / فشل الحفظ: "+err.message); }
-};
-// open directly from the patient page: horse-file.html?pid=..&name=..
-{ const u=new URLSearchParams(location.search); const q=u.get("pid")||u.get("name"); if(q){ $("#pick").value=u.get("name")||q; collect(q); } }
+  }catch(err){ console.error(err); alert("Save failed / فشل الحفظ: "+err.message+permHint(err)); }
+}
+async function showRecords(filter){
+  const m=$("#recModal"); m.classList.add("show");
+  if(filter!==undefined) $("#recQ").value=filter||"";
+  const box=$("#recList"); box.innerHTML="Loading… / جاري التحميل";
+  let all=[]; try{ all=(await recStore.list()).sort(byNewest); }catch(e){ box.innerHTML=`<p class="bad">Could not load records / تعذر تحميل السجلات: ${escT(e.message)}${escT(permHint(e))}</p>`; return; }
+  const draw=()=>{
+    const q=hk($("#recQ").value), dr=$("#recDr").checked;
+    const L=all.filter(r=>(dr||r.status!=="draft") && (!q || [r.pid,r.name,r.nameEn,r.vet,r.fileDate].some(x=>hk(x).includes(q))));
+    box.innerHTML=L.length? `<table><thead><tr><th>Saved / تاريخ الحفظ</th><th>Horse / الحصان</th><th>ID / الرقم</th><th>Type / النوع</th><th>File date / تاريخ الملف</th><th>Weight / الوزن</th><th>Vet / الطبيب</th><th></th></tr></thead><tbody>
+      ${L.map(r=>`<tr><td>${escT(when(r.savedAt))}</td><td>${escT(r.name||"")}${r.nameEn?"<br><small>"+escT(r.nameEn)+"</small>":""}</td><td>${escT(r.pid||"")}</td>
+        <td>${r.status==="draft"?'<span class="pill p-dr">Draft / مسودة</span>':'<span class="pill p-fi">Saved / محفوظ</span>'}</td><td>${escT(r.fileDate||"")}</td><td>${r.weightKg?escT(r.weightKg)+" kg":""}</td><td>${escT(r.vet||"")}</td>
+        <td style="white-space:nowrap"><button class="b-load" data-o="${escT(r._id)}">Open / فتح</button><button class="b-print" data-p="${escT(r._id)}">Print / طباعة</button><button data-d="${escT(r._id)}" style="background:#fee2e2;color:#9c0006">Delete / حذف</button></td></tr>`).join("")}</tbody></table>
+      <p class="hint" style="padding:6px 0">${L.length} record(s) / سجل</p>`
+      : `<p class="hint" style="padding:10px 0">No saved records${q?" for this search":""} / لا توجد سجلات محفوظة</p>`;
+    bilingual(box);
+    const get=id=>all.find(r=>r._id===id);
+    box.querySelectorAll("[data-o]").forEach(b=>b.onclick=()=>openRecord(get(b.dataset.o)));
+    box.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{ if(openRecord(get(b.dataset.p))) setTimeout(()=>window.print(),400); });
+    box.querySelectorAll("[data-d]").forEach(b=>b.onclick=async()=>{ const r=get(b.dataset.d);
+      if(!confirm(`Delete this record permanently? It cannot be undone.\nحذف هذا السجل نهائياً؟ لا يمكن التراجع\n\n${r.name||r.nameEn||r.pid} – ${when(r.savedAt)}`)) return;
+      try{ await recStore.del(r._id); all=all.filter(x=>x._id!==r._id); draw(); }catch(e){ alert("Delete failed / فشل الحذف: "+e.message); } });
+  };
+  $("#recQ").oninput=draw; $("#recDr").onchange=draw; draw();
+}
+$("#recClose").onclick=()=>$("#recModal").classList.remove("show");
+
+/* ================================================================
+   v3 – Horse List + Summary (from Horse_Records_2026.xlsx, stored in your site's "horses")
+   ================================================================ */
+const CATS=[["كبير بالسن / Aged – out of service","#d9d9d9"],["فريق القفز / Jumping team","#ddebf7"],["مراسيم / Ceremonial","#fff2cc"],
+            ["انتاج / Breeding","#e2efda"],["صغار – تدريب / Young – training","#fce4d6"],["مدرسة الأطفال / Children's school","#e4dfec"]];
+const TYPES=["فرس / Mare","حصان / Gelding","فحل / Stallion","مهره / Filly","فلو / Colt foal","فلوه / Filly foal","بوني فحل / Pony stallion","بوني فرس / Pony mare"];
+const SOURCES=["مستوردة / Imported","انتاج الفروسية / Equestrian production","مهداة / Gifted"];
+const SVC=["Service age / في سن الخدمة","Over age (>15) – out of service / كبير بالسن","Below service age (<5) / دون سن الخدمة","Not available / غير متوفر"];
+const ageOf=y=>{ const n=parseInt(y,10); return isNaN(n)||n<1900? null : new Date().getFullYear()-n; };
+const svcOf=y=>{ const a=ageOf(y); return a===null? SVC[3] : a>15? SVC[1] : a<5? SVC[2] : SVC[0]; };
+const catColor=c=>(CATS.find(x=>hk(x[0])===hk(c))||[])[1]||"";
+let LIST=[], LIST_ON=false;
+async function loadList(){
+  const [L,recs]=await Promise.all([store.horses(), recStore.list().catch(()=>[])]);
+  const n=x=>{ const v=parseFloat(x.listNo); return isNaN(v)?Infinity:v; };
+  return L.map(e=>({key:e.key,...e.data,pid:e.data.pid||"",name:e.data.name||""}))
+    .map(h=>({...h, nFiles:recs.filter(r=>r.status!=="draft" && recOfHorse(r,h)).length}))
+    .sort((a,b)=>n(a)-n(b)||String(a.name).localeCompare(String(b.name)));
+}
+function countBy(list,keys,f){ const m=new Map(keys.map(k=>[k,0])); let other=0;
+  list.forEach(h=>{ const v=f(h); const k=keys.find(x=>hk(x)===hk(v)); if(k) m.set(k,m.get(k)+1); else other++; });
+  const rows=[...m.entries()]; if(other) rows.push(["Other / أخرى",other]); return rows; }
+function sumTable(title,rows){
+  return `<table><thead><tr><th>${escT(title)}</th><th>Count / العدد</th></tr></thead><tbody>${rows.map(([k,v])=>`<tr><td style="background:${catColor(k)}">${escT(k)}</td><td style="text-align:center">${v}</td></tr>`).join("")}
+    <tr><td><b>Total / المجموع</b></td><td style="text-align:center"><b>${rows.reduce((a,r)=>a+r[1],0)}</b></td></tr></tbody></table>`;
+}
+async function showList(){
+  LIST_ON=true; $("#form").hidden=true; $("#actions").hidden=true; const v=$("#listView"); v.hidden=false;
+  v.innerHTML=`<p>Loading… / جاري التحميل</p>`;
+  try{ LIST=await loadList(); }catch(e){ v.innerHTML=`<p class="bad">${escT(e.message)}</p>`; return; }
+  const yr=new Date().getFullYear();
+  v.innerHTML=`<div class="head"><span>Military Equestrian Field – Horse List</span><span>كشف بأسماء خيل ميدان الفروسية العسكري</span></div>
+    <div class="rowx noprint"><button class="b-load" id="lvBack">← Back to Horse File / العودة للملف</button>
+      <button class="b-imp" id="lvImp">📄 Import / update from Excel / استيراد من الإكسل</button>
+      <button class="b-formx" id="lvXl">⬇ Excel (list + summary) / تحميل</button>
+      <button class="b-print" onclick="window.print()">🖨 Print / طباعة</button>
+      <input id="lvQ" placeholder="Filter / تصفية" style="flex:1 1 180px;padding:7px;border:1px solid #999;border-radius:4px"></div>
+    ${LIST.length? "" : `<div class="found none" style="margin-top:10px">No horses on the site yet. Press <b>📄 Import</b> and choose <b>Horse_Records_2026.xlsx</b> – the list is then saved in your site (signed-in only). / لا توجد خيول بعد – استورد ملف الإكسل</div>`}
+    <h2 class="bilang">Horse List / كشف الخيل</h2>
+    <div style="overflow-x:auto"><table id="lvT"><thead><tr><th>No. / ت</th><th>Patient ID / رقم المريض</th><th>Horse Name / اسم الخيل</th><th>Name (English) / الاسم بالإنجليزية</th><th>Type / نوع الخيل</th><th>Birth Year / مواليد</th><th>Age / العمر</th><th>Source / المصدر</th><th>Notes / الملاحظات</th><th>Category / الفئة</th><th>Service Status / حالة الخدمة</th><th>Horse files / ملفات</th></tr></thead><tbody></tbody></table></div>
+    <p class="hint noprint" style="padding:0">Click a horse to open its comprehensive file. Age and service status are calculated from the birth year (${yr}). / اضغط على الحصان لفتح ملفه</p>
+    <h2 class="bilang">Summary / ملخص الخيل</h2>
+    <div class="sum">${sumTable("Category / الفئة",countBy(LIST,CATS.map(c=>c[0]),h=>h.category))}${sumTable("Type / نوع الخيل",countBy(LIST,TYPES,h=>h.sex))}
+      ${sumTable("Source / مصدر الخيل",countBy(LIST,SOURCES,h=>h.source))}${sumTable("Service Status / حالة الخدمة",countBy(LIST,SVC,h=>svcOf(h.birthYear)))}</div>
+    <h2 class="bilang">Legend / دليل الألوان</h2>
+    <div class="legend">${CATS.map(c=>`<span style="background:${c[1]}">${escT(c[0])}</span>`).join("")}</div>
+    <h2 class="bilang">Notes / ملاحظات</h2>
+    <ul style="margin:0;padding-inline-start:20px">
+      <li>Horses over 15 years are considered aged and out of the unit's service range. / <span class="ar">تعتبر الخيل المجتازة 15 عام كبيرة سن وخارج عن نطاق الاستخدام لدى الوحدة.</span></li>
+      <li>Horses enter active service at 5 years of age. / <span class="ar">دخول الخيل بالخدمة الفعلية يبدأ في عمر 5 سنوات.</span></li>
+      <li>Horses unfit for service are transferred to breeding only. / <span class="ar">الخيل الغير صالحة بدخول الخدمة يتم تحويلها لخيل الإنتاج فقط.</span></li></ul>`;
+  const drawRows=()=>{ const q=hk($("#lvQ").value);
+    const L=LIST.filter(h=>!q||[h.listNo,h.pid,h.name,h.nameEn,h.sex,h.category,h.source,h.listNotes].some(x=>hk(x).includes(q)));
+    $("#lvT tbody").innerHTML=L.map(h=>{ const a=ageOf(h.birthYear), bg=catColor(h.category);
+      return `<tr data-k="${escT(h.key)}"${bg?` style="background:${bg}"`:""}><td>${escT(h.listNo||"")}</td><td>${escT(h.pid||"")}</td><td class="ar">${escT(h.name)}</td><td>${escT(h.nameEn||"")}</td><td>${escT(h.sex||"")}</td><td>${escT(h.birthYear||"")}</td><td>${a===null?"":a}</td><td>${escT(h.source||"")}</td><td>${escT(h.listNotes||"")}</td><td>${escT(h.category||"")}</td><td>${escT(svcOf(h.birthYear))}</td><td style="text-align:center">${h.nFiles||""}</td></tr>`; }).join("");
+    $("#lvT tbody").querySelectorAll("tr").forEach(tr=>tr.onclick=()=>{ const h=LIST.find(x=>x.key===tr.dataset.k); hideList(); $("#openQ").value=h.name||h.pid; offer(h); window.scrollTo({top:0}); }); };
+  bilingual(v); drawRows();
+  $("#lvQ").oninput=drawRows; $("#lvBack").onclick=hideList; $("#lvImp").onclick=()=>$("#impFile").click();
+  $("#lvXl").onclick=downloadList;
+}
+function hideList(){ LIST_ON=false; $("#listView").hidden=true; $("#form").hidden=false; $("#actions").hidden=false; }
+async function downloadList(){
+  const XLSX=await import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs");
+  const head=["No. / ت","Patient ID / رقم المريض","Horse Name / اسم الخيل","Name (English)","Type / نوع الخيل","Birth Year / مواليد الخيل","Age / العمر","Source / مصدر الخيل","Notes / الملاحظات","Category / الفئة","Service Status / حالة الخدمة","Horse files saved / ملفات محفوظة"];
+  const rows=LIST.map(h=>[h.listNo||"",h.pid||"",h.name,h.nameEn||"",h.sex||"",h.birthYear||"",ageOf(h.birthYear)??"",h.source||"",h.listNotes||"",h.category||"",svcOf(h.birthYear),h.nFiles||0]);
+  const ws=XLSX.utils.aoa_to_sheet([["كشف بأسماء خيل ميدان الفروسية العسكري"],["Military Equestrian Field – Horse List – "+today()],[],head,...rows]);
+  ws["!cols"]=head.map(()=>({wch:22}));
+  const sum=[["Summary / ملخص الخيل"],[]];
+  [["Category / الفئة",countBy(LIST,CATS.map(c=>c[0]),h=>h.category)],["Type / نوع الخيل",countBy(LIST,TYPES,h=>h.sex)],["Source / مصدر الخيل",countBy(LIST,SOURCES,h=>h.source)],["Service Status / حالة الخدمة",countBy(LIST,SVC,h=>svcOf(h.birthYear))]]
+    .forEach(([t,r])=>{ sum.push([t,"Count / العدد"],...r,["Total / المجموع",r.reduce((a,x)=>a+x[1],0)],[]); });
+  const ws2=XLSX.utils.aoa_to_sheet(sum); ws2["!cols"]=[{wch:44},{wch:14}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Horse List"); XLSX.utils.book_append_sheet(wb,ws2,"Summary");
+  XLSX.writeFile(wb,`Horse_List_${today()}.xlsx`);
+}
+
+/* ---------- buttons ---------- */
+$("#openGo").onclick=()=>findAndOffer($("#openQ").value);
+$("#openQ").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); findAndOffer($("#openQ").value); } });
+$("#btnLoad").onclick=()=>{ $("#openQ").value=$("#pick").value; if(LIST_ON) hideList(); window.scrollTo({top:0}); findAndOffer($("#pick").value); };
+$("#btnSave").onclick=()=>saveFile("final");
+$("#btnSaveB").onclick=()=>saveFile("final");
+$("#btnDraftB").onclick=()=>saveFile("draft");
+$("#btnPrintB").onclick=()=>window.print();
+const recFilter=()=>{ const d=getForm(); return d.name||d.nameEn||d.patientId||""; };
+$("#btnRecs").onclick=()=>showRecords(recFilter());
+$("#btnRecsB").onclick=()=>showRecords(recFilter());
+$("#openRecs").onclick=()=>showRecords("");
+$("#btnList").onclick=()=>LIST_ON?hideList():showList();
+$("#openList").onclick=showList;
+
 /* Blank Excel form used as the layout for downloads (contains no horse data) */
 const FORM_TPL = {"parts": {"docProps/app.xml": "<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\"><Application>Microsoft Excel Compatible / Openpyxl 3.1.5<\/Application><AppVersion>3.1<\/AppVersion><\/Properties>", "docProps/core.xml": "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\"><dc:creator xmlns:dc=\"http://purl.org/dc/elements/1.1/\">openpyxl<\/dc:creator><dcterms:created xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"dcterms:W3CDTF\">2026-11-16T08:53:36Z<\/dcterms:created><dcterms:modified xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"dcterms:W3CDTF\">2026-11-16T09:01:52Z<\/dcterms:modified><\/cp:coreProperties>", "xl/theme/theme1.xml": "<?xml version=\"1.0\"?>\n<a:theme xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" name=\"Office Theme\">\n  <a:themeElements>\n    <a:clrScheme name=\"Office\">\n      <a:dk1>\n        <a:sysClr val=\"windowText\" lastClr=\"000000\"/>\n      <\/a:dk1>\n      <a:lt1>\n        <a:sysClr val=\"window\" lastClr=\"FFFFFF\"/>\n      <\/a:lt1>\n      <a:dk2>\n        <a:srgbClr val=\"1F497D\"/>\n      <\/a:dk2>\n      <a:lt2>\n        <a:srgbClr val=\"EEECE1\"/>\n      <\/a:lt2>\n      <a:accent1>\n        <a:srgbClr val=\"4F81BD\"/>\n      <\/a:accent1>\n      <a:accent2>\n        <a:srgbClr val=\"C0504D\"/>\n      <\/a:accent2>\n      <a:accent3>\n        <a:srgbClr val=\"9BBB59\"/>\n      <\/a:accent3>\n      <a:accent4>\n        <a:srgbClr val=\"8064A2\"/>\n      <\/a:accent4>\n      <a:accent5>\n        <a:srgbClr val=\"4BACC6\"/>\n      <\/a:accent5>\n      <a:accent6>\n        <a:srgbClr val=\"F79646\"/>\n      <\/a:accent6>\n      <a:hlink>\n        <a:srgbClr val=\"0000FF\"/>\n      <\/a:hlink>\n      <a:folHlink>\n        <a:srgbClr val=\"800080\"/>\n      <\/a:folHlink>\n    <\/a:clrScheme>\n    <a:fontScheme name=\"Office\">\n      <a:majorFont>\n        <a:latin typeface=\"Cambria\"/>\n        <a:ea typeface=\"\"/>\n        <a:cs typeface=\"\"/>\n        <a:font script=\"Jpan\" typeface=\"&#xFF2D;&#xFF33; &#xFF30;&#x30B4;&#x30B7;&#x30C3;&#x30AF;\"/>\n        <a:font script=\"Hang\" typeface=\"&#xB9D1;&#xC740; &#xACE0;&#xB515;\"/>\n        <a:font script=\"Hans\" typeface=\"&#x5B8B;&#x4F53;\"/>\n        <a:font script=\"Hant\" typeface=\"&#x65B0;&#x7D30;&#x660E;&#x9AD4;\"/>\n        <a:font script=\"Arab\" typeface=\"Times New Roman\"/>\n        <a:font script=\"Hebr\" typeface=\"Times New Roman\"/>\n        <a:font script=\"Thai\" typeface=\"Tahoma\"/>\n        <a:font script=\"Ethi\" typeface=\"Nyala\"/>\n        <a:font script=\"Beng\" typeface=\"Vrinda\"/>\n        <a:font script=\"Gujr\" typeface=\"Shruti\"/>\n        <a:font script=\"Khmr\" typeface=\"MoolBoran\"/>\n        <a:font script=\"Knda\" typeface=\"Tunga\"/>\n        <a:font script=\"Guru\" typeface=\"Raavi\"/>\n        <a:font script=\"Cans\" typeface=\"Euphemia\"/>\n        <a:font script=\"Cher\" typeface=\"Plantagenet Cherokee\"/>\n        <a:font script=\"Yiii\" typeface=\"Microsoft Yi Baiti\"/>\n        <a:font script=\"Tibt\" typeface=\"Microsoft Himalaya\"/>\n        <a:font script=\"Thaa\" typeface=\"MV Boli\"/>\n        <a:font script=\"Deva\" typeface=\"Mangal\"/>\n        <a:font script=\"Telu\" typeface=\"Gautami\"/>\n        <a:font script=\"Taml\" typeface=\"Latha\"/>\n        <a:font script=\"Syrc\" typeface=\"Estrangelo Edessa\"/>\n        <a:font script=\"Orya\" typeface=\"Kalinga\"/>\n        <a:font script=\"Mlym\" typeface=\"Kartika\"/>\n        <a:font script=\"Laoo\" typeface=\"DokChampa\"/>\n        <a:font script=\"Sinh\" typeface=\"Iskoola Pota\"/>\n        <a:font script=\"Mong\" typeface=\"Mongolian Baiti\"/>\n        <a:font script=\"Viet\" typeface=\"Times New Roman\"/>\n        <a:font script=\"Uigh\" typeface=\"Microsoft Uighur\"/>\n      <\/a:majorFont>\n      <a:minorFont>\n        <a:latin typeface=\"Calibri\"/>\n        <a:ea typeface=\"\"/>\n        <a:cs typeface=\"\"/>\n        <a:font script=\"Jpan\" typeface=\"&#xFF2D;&#xFF33; &#xFF30;&#x30B4;&#x30B7;&#x30C3;&#x30AF;\"/>\n        <a:font script=\"Hang\" typeface=\"&#xB9D1;&#xC740; &#xACE0;&#xB515;\"/>\n        <a:font script=\"Hans\" typeface=\"&#x5B8B;&#x4F53;\"/>\n        <a:font script=\"Hant\" typeface=\"&#x65B0;&#x7D30;&#x660E;&#x9AD4;\"/>\n        <a:font script=\"Arab\" typeface=\"Arial\"/>\n        <a:font script=\"Hebr\" typeface=\"Arial\"/>\n        <a:font script=\"Thai\" typeface=\"Tahoma\"/>\n        <a:font script=\"Ethi\" typeface=\"Nyala\"/>\n        <a:font script=\"Beng\" typeface=\"Vrinda\"/>\n        <a:font script=\"Gujr\" typeface=\"Shruti\"/>\n        <a:font script=\"Khmr\" typeface=\"DaunPenh\"/>\n        <a:font script=\"Knda\" typeface=\"Tunga\"/>\n        <a:font script=\"Guru\" typeface=\"Raavi\"/>\n        <a:font script=\"Cans\" typeface=\"Euphemia\"/>\n        <a:font script=\"Cher\" typeface=\"Plantagenet Cherokee\"/>\n        <a:font script=\"Yiii\" typeface=\"Microsoft Yi Baiti\"/>\n        <a:font script=\"Tibt\" typeface=\"Microsoft Himalaya\"/>\n        <a:font script=\"Thaa\" typeface=\"MV Boli\"/>\n        <a:font script=\"Deva\" typeface=\"Mangal\"/>\n        <a:font script=\"Telu\" typeface=\"Gautami\"/>\n        <a:font script=\"Taml\" typeface=\"Latha\"/>\n        <a:font script=\"Syrc\" typeface=\"Estrangelo Edessa\"/>\n        <a:font script=\"Orya\" typeface=\"Kalinga\"/>\n        <a:font script=\"Mlym\" typeface=\"Kartika\"/>\n        <a:font script=\"Laoo\" typeface=\"DokChampa\"/>\n        <a:font script=\"Sinh\" typeface=\"Iskoola Pota\"/>\n        <a:font script=\"Mong\" typeface=\"Mongolian Baiti\"/>\n        <a:font script=\"Viet\" typeface=\"Arial\"/>\n        <a:font script=\"Uigh\" typeface=\"Microsoft Uighur\"/>\n      <\/a:minorFont>\n    <\/a:fontScheme>\n    <a:fmtScheme name=\"Office\">\n      <a:fillStyleLst>\n        <a:solidFill>\n          <a:schemeClr val=\"phClr\"/>\n        <\/a:solidFill>\n        <a:gradFill rotWithShape=\"1\">\n          <a:gsLst>\n            <a:gs pos=\"0\">\n              <a:schemeClr val=\"phClr\">\n                <a:tint val=\"50000\"/>\n                <a:satMod val=\"300000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n            <a:gs pos=\"35000\">\n              <a:schemeClr val=\"phClr\">\n                <a:tint val=\"37000\"/>\n                <a:satMod val=\"300000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n            <a:gs pos=\"100000\">\n              <a:schemeClr val=\"phClr\">\n                <a:tint val=\"15000\"/>\n                <a:satMod val=\"350000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n          <\/a:gsLst>\n          <a:lin ang=\"16200000\" scaled=\"1\"/>\n        <\/a:gradFill>\n        <a:gradFill rotWithShape=\"1\">\n          <a:gsLst>\n            <a:gs pos=\"0\">\n              <a:schemeClr val=\"phClr\">\n                <a:shade val=\"51000\"/>\n                <a:satMod val=\"130000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n            <a:gs pos=\"80000\">\n              <a:schemeClr val=\"phClr\">\n                <a:shade val=\"93000\"/>\n                <a:satMod val=\"130000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n            <a:gs pos=\"100000\">\n              <a:schemeClr val=\"phClr\">\n                <a:shade val=\"94000\"/>\n                <a:satMod val=\"135000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n          <\/a:gsLst>\n          <a:lin ang=\"16200000\" scaled=\"0\"/>\n        <\/a:gradFill>\n      <\/a:fillStyleLst>\n      <a:lnStyleLst>\n        <a:ln w=\"9525\" cap=\"flat\" cmpd=\"sng\" algn=\"ctr\">\n          <a:solidFill>\n            <a:schemeClr val=\"phClr\">\n              <a:shade val=\"95000\"/>\n              <a:satMod val=\"105000\"/>\n            <\/a:schemeClr>\n          <\/a:solidFill>\n          <a:prstDash val=\"solid\"/>\n        <\/a:ln>\n        <a:ln w=\"25400\" cap=\"flat\" cmpd=\"sng\" algn=\"ctr\">\n          <a:solidFill>\n            <a:schemeClr val=\"phClr\"/>\n          <\/a:solidFill>\n          <a:prstDash val=\"solid\"/>\n        <\/a:ln>\n        <a:ln w=\"38100\" cap=\"flat\" cmpd=\"sng\" algn=\"ctr\">\n          <a:solidFill>\n            <a:schemeClr val=\"phClr\"/>\n          <\/a:solidFill>\n          <a:prstDash val=\"solid\"/>\n        <\/a:ln>\n      <\/a:lnStyleLst>\n      <a:effectStyleLst>\n        <a:effectStyle>\n          <a:effectLst>\n            <a:outerShdw blurRad=\"40000\" dist=\"20000\" dir=\"5400000\" rotWithShape=\"0\">\n              <a:srgbClr val=\"000000\">\n                <a:alpha val=\"38000\"/>\n              <\/a:srgbClr>\n            <\/a:outerShdw>\n          <\/a:effectLst>\n        <\/a:effectStyle>\n        <a:effectStyle>\n          <a:effectLst>\n            <a:outerShdw blurRad=\"40000\" dist=\"23000\" dir=\"5400000\" rotWithShape=\"0\">\n              <a:srgbClr val=\"000000\">\n                <a:alpha val=\"35000\"/>\n              <\/a:srgbClr>\n            <\/a:outerShdw>\n          <\/a:effectLst>\n        <\/a:effectStyle>\n        <a:effectStyle>\n          <a:effectLst>\n            <a:outerShdw blurRad=\"40000\" dist=\"23000\" dir=\"5400000\" rotWithShape=\"0\">\n              <a:srgbClr val=\"000000\">\n                <a:alpha val=\"35000\"/>\n              <\/a:srgbClr>\n            <\/a:outerShdw>\n          <\/a:effectLst>\n          <a:scene3d>\n            <a:camera prst=\"orthographicFront\">\n              <a:rot lat=\"0\" lon=\"0\" rev=\"0\"/>\n            <\/a:camera>\n            <a:lightRig rig=\"threePt\" dir=\"t\">\n              <a:rot lat=\"0\" lon=\"0\" rev=\"1200000\"/>\n            <\/a:lightRig>\n          <\/a:scene3d>\n          <a:sp3d>\n            <a:bevelT w=\"63500\" h=\"25400\"/>\n          <\/a:sp3d>\n        <\/a:effectStyle>\n      <\/a:effectStyleLst>\n      <a:bgFillStyleLst>\n        <a:solidFill>\n          <a:schemeClr val=\"phClr\"/>\n        <\/a:solidFill>\n        <a:gradFill rotWithShape=\"1\">\n          <a:gsLst>\n            <a:gs pos=\"0\">\n              <a:schemeClr val=\"phClr\">\n                <a:tint val=\"40000\"/>\n                <a:satMod val=\"350000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n            <a:gs pos=\"40000\">\n              <a:schemeClr val=\"phClr\">\n                <a:tint val=\"45000\"/>\n                <a:shade val=\"99000\"/>\n                <a:satMod val=\"350000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n            <a:gs pos=\"100000\">\n              <a:schemeClr val=\"phClr\">\n                <a:shade val=\"20000\"/>\n                <a:satMod val=\"255000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n          <\/a:gsLst>\n          <a:path path=\"circle\">\n            <a:fillToRect l=\"50000\" t=\"-80000\" r=\"50000\" b=\"180000\"/>\n          <\/a:path>\n        <\/a:gradFill>\n        <a:gradFill rotWithShape=\"1\">\n          <a:gsLst>\n            <a:gs pos=\"0\">\n              <a:schemeClr val=\"phClr\">\n                <a:tint val=\"80000\"/>\n                <a:satMod val=\"300000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n            <a:gs pos=\"100000\">\n              <a:schemeClr val=\"phClr\">\n                <a:shade val=\"30000\"/>\n                <a:satMod val=\"200000\"/>\n              <\/a:schemeClr>\n            <\/a:gs>\n          <\/a:gsLst>\n          <a:path path=\"circle\">\n            <a:fillToRect l=\"50000\" t=\"50000\" r=\"50000\" b=\"50000\"/>\n          <\/a:path>\n        <\/a:gradFill>\n      <\/a:bgFillStyleLst>\n    <\/a:fmtScheme>\n  <\/a:themeElements>\n  <a:objectDefaults/>\n  <a:extraClrSchemeLst/>\n<\/a:theme>\n", "xl/worksheets/sheet1.xml": "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetPr><outlinePr summaryBelow=\"1\" summaryRight=\"1\"/><pageSetUpPr fitToPage=\"1\"/><\/sheetPr><dimension ref=\"A1:H57\"/><sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"><selection activeCell=\"A1\" sqref=\"A1\"/><\/sheetView><\/sheetViews><sheetFormatPr baseColWidth=\"8\" defaultRowHeight=\"15\"/><cols><col width=\"22\" customWidth=\"1\" min=\"1\" max=\"1\"/><col width=\"18\" customWidth=\"1\" min=\"2\" max=\"2\"/><col width=\"22\" customWidth=\"1\" min=\"3\" max=\"3\"/><col width=\"18\" customWidth=\"1\" min=\"4\" max=\"4\"/><col width=\"22\" customWidth=\"1\" min=\"5\" max=\"5\"/><col width=\"18\" customWidth=\"1\" min=\"6\" max=\"6\"/><col width=\"22\" customWidth=\"1\" min=\"7\" max=\"7\"/><col width=\"18\" customWidth=\"1\" min=\"8\" max=\"8\"/><\/cols><sheetData><row r=\"1\"><c r=\"A1\" s=\"1\" t=\"inlineStr\"><is><t>Kuwait Army Equestrian Team<\/t><\/is><\/c><c r=\"F1\" s=\"2\" t=\"inlineStr\"><is><t>&#1605;&#1583;&#1610;&#1585;&#1610;&#1577; &#1575;&#1604;&#1575;&#1578;&#1581;&#1575;&#1583; &#1575;&#1604;&#1585;&#1610;&#1575;&#1590;&#1610; &#1575;&#1604;&#1593;&#1587;&#1603;&#1585;&#1610;<\/t><\/is><\/c><\/row><row r=\"2\" ht=\"26\" customHeight=\"1\"><c r=\"A2\" s=\"3\" t=\"inlineStr\"><is><t>&#1575;&#1604;&#1605;&#1604;&#1601; &#1575;&#1604;&#1588;&#1575;&#1605;&#1604; &#1604;&#1604;&#1582;&#1610;&#1604; - &#1605;&#1593; &#1578;&#1575;&#1585;&#1610;&#1582; &#1575;&#1604;&#1578;&#1581;&#1584;&#1610;&#1577;<\/t><\/is><\/c><\/row><row r=\"3\"><c r=\"A3\" s=\"4\" t=\"inlineStr\"><is><t>Kuwait Army Equestrian Team - Comprehensive File + Tahdhiya (Shoeing) Date - 2026<\/t><\/is><\/c><\/row><row r=\"4\"><c r=\"A4\" s=\"5\" t=\"inlineStr\"><is><t>How to use / &#1591;&#1585;&#1610;&#1602;&#1577; &#1575;&#1604;&#1575;&#1587;&#1578;&#1582;&#1583;&#1575;&#1605;:  Yellow cells = enter data / &#1575;&#1604;&#1582;&#1604;&#1575;&#1610;&#1575; &#1575;&#1604;&#1589;&#1601;&#1585;&#1575;&#1569; &#1604;&#1604;&#1573;&#1583;&#1582;&#1575;&#1604;  &#8226;  Cells with &#9660; have a drop-down list / &#1575;&#1604;&#1602;&#1608;&#1575;&#1574;&#1605; &#1575;&#1604;&#1605;&#1606;&#1587;&#1583;&#1604;&#1577;  &#8226;  Dates as dd/mm/yyyy<\/t><\/is><\/c><\/row><row r=\"5\"><\/row><row r=\"6\" ht=\"20\" customHeight=\"1\"><c r=\"A6\" s=\"6\" t=\"inlineStr\"><is><t>A. Identity / &#1575;&#1604;&#1607;&#1608;&#1610;&#1577;<\/t><\/is><\/c><\/row><row r=\"7\" ht=\"30\" customHeight=\"1\"><c r=\"A7\" s=\"8\" t=\"inlineStr\"><is><t>Horse Name / &#1575;&#1587;&#1605; &#1575;&#1604;&#1581;&#1589;&#1575;&#1606;<\/t><\/is><\/c><c r=\"B7\" s=\"9\" t=\"n\"><\/c><c r=\"C7\" s=\"8\" t=\"inlineStr\"><is><t>Microchip No. / &#1585;&#1602;&#1605; &#1575;&#1604;&#1588;&#1585;&#1610;&#1581;&#1577;<\/t><\/is><\/c><c r=\"D7\" s=\"9\" t=\"n\"><\/c><c r=\"E7\" s=\"8\" t=\"inlineStr\"><is><t>Military No. / &#1575;&#1604;&#1585;&#1602;&#1605; &#1575;&#1604;&#1593;&#1587;&#1603;&#1585;&#1610;<\/t><\/is><\/c><c r=\"F7\" s=\"9\" t=\"n\"><\/c><c r=\"G7\" s=\"8\" t=\"inlineStr\"><is><t>Age / &#1575;&#1604;&#1593;&#1605;&#1585;<\/t><\/is><\/c><c r=\"H7\" s=\"10\" t=\"n\"><\/c><\/row><row r=\"8\" ht=\"30\" customHeight=\"1\"><c r=\"A8\" s=\"8\" t=\"inlineStr\"><is><t>Sex / &#1575;&#1604;&#1580;&#1606;&#1587; &#9660;<\/t><\/is><\/c><c r=\"B8\" s=\"9\" t=\"n\"><\/c><c r=\"C8\" s=\"8\" t=\"inlineStr\"><is><t>Breed / &#1575;&#1604;&#1587;&#1604;&#1575;&#1604;&#1577; &#9660;<\/t><\/is><\/c><c r=\"D8\" s=\"9\" t=\"n\"><\/c><c r=\"E8\" s=\"8\" t=\"inlineStr\"><is><t>Color / &#1575;&#1604;&#1604;&#1608;&#1606;<\/t><\/is><\/c><c r=\"F8\" s=\"9\" t=\"n\"><\/c><c r=\"G8\" s=\"8\" t=\"inlineStr\"><is><t>Rider / &#1575;&#1604;&#1601;&#1575;&#1585;&#1587;<\/t><\/is><\/c><c r=\"H8\" s=\"9\" t=\"n\"><\/c><\/row><row r=\"9\" ht=\"30\" customHeight=\"1\"><c r=\"A9\" s=\"8\" t=\"inlineStr\"><is><t>Purpose / &#1605;&#1607;&#1606; &#1575;&#1604;&#1575;&#1587;&#1578;&#1582;&#1583;&#1575;&#1605;<\/t><\/is><\/c><c r=\"B9\" s=\"9\" t=\"n\"><\/c><c r=\"C9\" s=\"25\" t=\"n\"><\/c><c r=\"D9\" s=\"25\" t=\"n\"><\/c><c r=\"E9\" s=\"25\" t=\"n\"><\/c><c r=\"F9\" s=\"25\" t=\"n\"><\/c><c r=\"G9\" s=\"25\" t=\"n\"><\/c><c r=\"H9\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"10\"><\/row><row r=\"11\" ht=\"20\" customHeight=\"1\"><c r=\"A11\" s=\"12\" t=\"inlineStr\"><is><t>B. Measurements / &#1575;&#1604;&#1602;&#1610;&#1575;&#1587;&#1575;&#1578;<\/t><\/is><\/c><\/row><row r=\"12\" ht=\"30\" customHeight=\"1\"><c r=\"A12\" s=\"8\" t=\"inlineStr\"><is><t>Body Length (inch) / &#1591;&#1608;&#1604; &#1575;&#1604;&#1580;&#1587;&#1605; (&#1573;&#1606;&#1588;)<\/t><\/is><\/c><c r=\"B12\" s=\"14\" t=\"n\"><\/c><c r=\"C12\" s=\"8\" t=\"inlineStr\"><is><t>Heart Girth (inch) / &#1605;&#1581;&#1610;&#1591; &#1575;&#1604;&#1589;&#1583;&#1585; (&#1573;&#1606;&#1588;)<\/t><\/is><\/c><c r=\"D12\" s=\"14\" t=\"n\"><\/c><c r=\"E12\" s=\"8\" t=\"inlineStr\"><is><t>Divisor (editable) / &#1575;&#1604;&#1605;&#1602;&#1587;&#1608;&#1605; &#1593;&#1604;&#1610;&#1607;<\/t><\/is><\/c><c r=\"F12\" s=\"15\" t=\"n\"><v>300<\/v><\/c><c r=\"G12\" s=\"8\" t=\"inlineStr\"><is><t>lbs &#8594; kg (editable) / &#1575;&#1604;&#1578;&#1581;&#1608;&#1610;&#1604;<\/t><\/is><\/c><c r=\"H12\" s=\"14\" t=\"n\"><v>2.2<\/v><\/c><\/row><row r=\"13\" ht=\"30\" customHeight=\"1\"><c r=\"A13\" s=\"8\" t=\"inlineStr\"><is><t>Estimated Weight (lbs) / &#1575;&#1604;&#1608;&#1586;&#1606; &#1575;&#1604;&#1578;&#1602;&#1583;&#1610;&#1585;&#1610; (&#1585;&#1591;&#1604;)<\/t><\/is><\/c><c r=\"B13\" s=\"16\"><f>IF(OR(B12=\"\",D12=\"\",F12=\"\"),\"\",B12*D12*D12/F12)<\/f><v><\/v><\/c><c r=\"C13\" s=\"8\" t=\"inlineStr\"><is><t>Estimated Weight (kg) / &#1575;&#1604;&#1608;&#1586;&#1606; &#1575;&#1604;&#1578;&#1602;&#1583;&#1610;&#1585;&#1610; (&#1603;&#1594;)<\/t><\/is><\/c><c r=\"D13\" s=\"16\"><f>IF(OR(B13=\"\",H12=\"\"),\"\",B13/H12)<\/f><v><\/v><\/c><c r=\"E13\" s=\"8\" t=\"inlineStr\"><is><t>Manual Weight (kg) &#8211; if no tape / &#1608;&#1586;&#1606; &#1610;&#1583;&#1608;&#1610; (&#1603;&#1594;)<\/t><\/is><\/c><c r=\"F13\" s=\"15\" t=\"n\"><\/c><c r=\"G13\" s=\"8\" t=\"inlineStr\"><is><t>Weight used for Rx (kg) / &#1575;&#1604;&#1608;&#1586;&#1606; &#1575;&#1604;&#1605;&#1593;&#1578;&#1605;&#1583; &#1604;&#1604;&#1608;&#1589;&#1601;&#1577;<\/t><\/is><\/c><c r=\"H13\" s=\"17\"><f>IF(F13&lt;&gt;\"\",F13,D13)<\/f><v><\/v><\/c><\/row><row r=\"14\" ht=\"24\" customHeight=\"1\"><c r=\"A14\" s=\"8\" t=\"inlineStr\"><is><t>Formula / &#1575;&#1604;&#1605;&#1593;&#1575;&#1583;&#1604;&#1577;<\/t><\/is><\/c><c r=\"B14\" s=\"18\"><f>IF(B13=\"\",\"(Length &#215; Girth &#215; Girth) inch &#247; \"&amp;F12&amp;\" = lbs &#247; \"&amp;H12&amp;\" = kg\",\"(\"&amp;B12&amp;\" &#215; \"&amp;D12&amp;\" &#215; \"&amp;D12&amp;\") &#247; \"&amp;F12&amp;\" = \"&amp;TEXT(B13,\"0\")&amp;\" lbs &#247; \"&amp;H12&amp;\" = \"&amp;TEXT(D13,\"0\")&amp;\" kg\")<\/f><v><\/v><\/c><c r=\"C14\" s=\"25\" t=\"n\"><\/c><c r=\"D14\" s=\"25\" t=\"n\"><\/c><c r=\"E14\" s=\"25\" t=\"n\"><\/c><c r=\"F14\" s=\"25\" t=\"n\"><\/c><c r=\"G14\" s=\"25\" t=\"n\"><\/c><c r=\"H14\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"15\" ht=\"30\" customHeight=\"1\"><c r=\"A15\" s=\"8\" t=\"inlineStr\"><is><t>Height (hand) / &#1575;&#1604;&#1591;&#1608;&#1604; &#1593;&#1606;&#1583; &#1575;&#1604;&#1581;&#1575;&#1585;&#1603;<\/t><\/is><\/c><c r=\"B15\" s=\"14\" t=\"n\"><\/c><c r=\"C15\" s=\"8\" t=\"inlineStr\"><is><t>BCS (1-9) / &#1581;&#1575;&#1604;&#1577; &#1575;&#1604;&#1580;&#1587;&#1605; &#9660;<\/t><\/is><\/c><c r=\"D15\" s=\"10\" t=\"n\"><\/c><c r=\"E15\" s=\"8\" t=\"inlineStr\"><is><t>Last Weight Date / &#1578;&#1575;&#1585;&#1610;&#1582; &#1570;&#1582;&#1585; &#1608;&#1586;&#1606;<\/t><\/is><\/c><c r=\"F15\" s=\"20\" t=\"n\"><\/c><\/row><row r=\"16\"><\/row><row r=\"17\" ht=\"20\" customHeight=\"1\"><c r=\"A17\" s=\"6\" t=\"inlineStr\"><is><t>C. Shoeing Date / &#1578;&#1575;&#1585;&#1610;&#1582; &#1575;&#1604;&#1578;&#1581;&#1584;&#1610;&#1577;<\/t><\/is><\/c><\/row><row r=\"18\" ht=\"30\" customHeight=\"1\"><c r=\"A18\" s=\"8\" t=\"inlineStr\"><is><t>Last Shoeing Date / &#1578;&#1575;&#1585;&#1610;&#1582; &#1570;&#1582;&#1585; &#1578;&#1581;&#1584;&#1610;&#1577;<\/t><\/is><\/c><c r=\"B18\" s=\"20\" t=\"n\"><\/c><c r=\"C18\" s=\"8\" t=\"inlineStr\"><is><t>Shoe Type / &#1606;&#1608;&#1593; &#1575;&#1604;&#1578;&#1581;&#1584;&#1610;&#1577; &#9660;<\/t><\/is><\/c><c r=\"D18\" s=\"9\" t=\"n\"><\/c><c r=\"E18\" s=\"8\" t=\"inlineStr\"><is><t>Shoeing / &#1575;&#1604;&#1578;&#1581;&#1584;&#1610;&#1577; &#9660;<\/t><\/is><\/c><c r=\"F18\" s=\"9\" t=\"n\"><\/c><c r=\"G18\" s=\"8\" t=\"inlineStr\"><is><t>Days since shoeing / &#1571;&#1610;&#1575;&#1605; &#1605;&#1606;&#1584; &#1575;&#1604;&#1578;&#1581;&#1584;&#1610;&#1577;<\/t><\/is><\/c><c r=\"H18\" s=\"21\"><f>IF(B18=\"\",\"\",TODAY()-B18)<\/f><v><\/v><\/c><\/row><row r=\"19\" ht=\"30\" customHeight=\"1\"><c r=\"A19\" s=\"8\" t=\"inlineStr\"><is><t>Type of Horseshoes / &#1606;&#1608;&#1593; &#1575;&#1604;&#1581;&#1583;&#1608;&#1575;&#1578; &#9660;<\/t><\/is><\/c><c r=\"B19\" s=\"9\" t=\"n\"><\/c><c r=\"C19\" s=\"8\" t=\"inlineStr\"><is><t>Current Hoof Condition / &#1575;&#1604;&#1581;&#1575;&#1604;&#1577; &#1575;&#1604;&#1581;&#1575;&#1604;&#1610;&#1577; &#1604;&#1604;&#1581;&#1608;&#1575;&#1601;&#1585; &#9660;<\/t><\/is><\/c><c r=\"D19\" s=\"9\" t=\"n\"><\/c><c r=\"E19\" s=\"8\" t=\"inlineStr\"><is><t>Pre-shoeing Notes / &#1605;&#1604;&#1575;&#1581;&#1592;&#1575;&#1578; &#1602;&#1576;&#1604; &#1575;&#1604;&#1578;&#1581;&#1584;&#1610;&#1577;<\/t><\/is><\/c><c r=\"F19\" s=\"9\" t=\"n\"><\/c><c r=\"G19\" s=\"25\" t=\"n\"><\/c><c r=\"H19\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"20\"><\/row><row r=\"21\" ht=\"20\" customHeight=\"1\"><c r=\"A21\" s=\"12\" t=\"inlineStr\"><is><t>D. Vital Signs / &#1575;&#1604;&#1593;&#1604;&#1575;&#1605;&#1575;&#1578; &#1575;&#1604;&#1581;&#1610;&#1608;&#1610;&#1577;<\/t><\/is><\/c><\/row><row r=\"22\" ht=\"36\" customHeight=\"1\"><c r=\"A22\" s=\"8\" t=\"inlineStr\"><is><t>Temperature (&#176;C) / &#1575;&#1604;&#1581;&#1585;&#1575;&#1585;&#1577;\nnormal 37.5&#8211;38.5<\/t><\/is><\/c><c r=\"B22\" s=\"14\" t=\"n\"><\/c><c r=\"C22\" s=\"8\" t=\"inlineStr\"><is><t>Pulse (bpm) / &#1575;&#1604;&#1606;&#1576;&#1590;\nnormal 28&#8211;44<\/t><\/is><\/c><c r=\"D22\" s=\"15\" t=\"n\"><\/c><c r=\"E22\" s=\"8\" t=\"inlineStr\"><is><t>Respiration (rpm) / &#1575;&#1604;&#1578;&#1606;&#1601;&#1587;\nnormal 8&#8211;16<\/t><\/is><\/c><c r=\"F22\" s=\"15\" t=\"n\"><\/c><c r=\"G22\" s=\"8\" t=\"inlineStr\"><is><t>Mucous Membranes / &#1575;&#1604;&#1571;&#1594;&#1588;&#1610;&#1577; &#9660;<\/t><\/is><\/c><c r=\"H22\" s=\"9\" t=\"n\"><\/c><\/row><row r=\"23\" ht=\"30\" customHeight=\"1\"><c r=\"A23\" s=\"8\" t=\"inlineStr\"><is><t>Behavior / &#1575;&#1604;&#1587;&#1604;&#1608;&#1603; &#9660;<\/t><\/is><\/c><c r=\"B23\" s=\"9\" t=\"n\"><\/c><c r=\"C23\" s=\"8\" t=\"inlineStr\"><is><t>Appetite / &#1575;&#1604;&#1588;&#1607;&#1610;&#1577; &#9660;<\/t><\/is><\/c><c r=\"D23\" s=\"9\" t=\"n\"><\/c><c r=\"E23\" s=\"8\" t=\"inlineStr\"><is><t>Vitals check / &#1601;&#1581;&#1589; &#1575;&#1604;&#1593;&#1604;&#1575;&#1605;&#1575;&#1578;<\/t><\/is><\/c><c r=\"F23\" s=\"22\"><f>IF(COUNT(B22,D22,F22)=0,\"\",IF(OR(AND(B22&lt;&gt;\"\",OR(B22&lt;37.5,B22&gt;38.5)),AND(D22&lt;&gt;\"\",OR(D22&lt;28,D22&gt;44)),AND(F22&lt;&gt;\"\",OR(F22&lt;8,F22&gt;16))),\"Check / &#1585;&#1575;&#1580;&#1593;\",\"Normal / &#1591;&#1576;&#1610;&#1593;&#1610;\"))<\/f><v><\/v><\/c><c r=\"G23\" s=\"25\" t=\"n\"><\/c><c r=\"H23\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"24\"><\/row><row r=\"25\" ht=\"20\" customHeight=\"1\"><c r=\"A25\" s=\"6\" t=\"inlineStr\"><is><t>E. Vaccinations &amp; Deworming / &#1575;&#1604;&#1578;&#1591;&#1593;&#1610;&#1605;&#1575;&#1578; &#1608;&#1575;&#1604;&#1583;&#1610;&#1583;&#1575;&#1606;<\/t><\/is><\/c><\/row><row r=\"26\"><c r=\"A26\" s=\"23\" t=\"inlineStr\"><is><t>Type / &#1575;&#1604;&#1606;&#1608;&#1593;<\/t><\/is><\/c><c r=\"B26\" s=\"26\" t=\"n\"><\/c><c r=\"C26\" s=\"23\" t=\"inlineStr\"><is><t>Last Dose / &#1570;&#1582;&#1585; &#1580;&#1585;&#1593;&#1577;<\/t><\/is><\/c><c r=\"D26\" s=\"26\" t=\"n\"><\/c><c r=\"E26\" s=\"23\" t=\"inlineStr\"><is><t>Next Dose / &#1575;&#1604;&#1580;&#1585;&#1593;&#1577; &#1575;&#1604;&#1602;&#1575;&#1583;&#1605;&#1577;<\/t><\/is><\/c><c r=\"F26\" s=\"26\" t=\"n\"><\/c><c r=\"G26\" s=\"23\" t=\"inlineStr\"><is><t>Notes / &#1605;&#1604;&#1575;&#1581;&#1592;&#1575;&#1578;<\/t><\/is><\/c><c r=\"H26\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"27\" ht=\"22\" customHeight=\"1\"><c r=\"A27\" s=\"8\" t=\"inlineStr\"><is><t>Equine Influenza / &#1575;&#1606;&#1601;&#1604;&#1608;&#1606;&#1586;&#1575; &#1575;&#1604;&#1582;&#1610;&#1604;<\/t><\/is><\/c><c r=\"B27\" s=\"26\" t=\"n\"><\/c><c r=\"C27\" s=\"20\" t=\"n\"><\/c><c r=\"D27\" s=\"26\" t=\"n\"><\/c><c r=\"E27\" s=\"20\" t=\"n\"><\/c><c r=\"F27\" s=\"26\" t=\"n\"><\/c><c r=\"G27\" s=\"9\" t=\"n\"><\/c><c r=\"H27\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"28\" ht=\"22\" customHeight=\"1\"><c r=\"A28\" s=\"8\" t=\"inlineStr\"><is><t>Tetanus / &#1575;&#1604;&#1578;&#1610;&#1578;&#1575;&#1606;&#1608;&#1587;<\/t><\/is><\/c><c r=\"B28\" s=\"26\" t=\"n\"><\/c><c r=\"C28\" s=\"20\" t=\"n\"><\/c><c r=\"D28\" s=\"26\" t=\"n\"><\/c><c r=\"E28\" s=\"20\" t=\"n\"><\/c><c r=\"F28\" s=\"26\" t=\"n\"><\/c><c r=\"G28\" s=\"9\" t=\"n\"><\/c><c r=\"H28\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"29\" ht=\"22\" customHeight=\"1\"><c r=\"A29\" s=\"8\" t=\"inlineStr\"><is><t>West Nile / &#1581;&#1605;&#1609; &#1594;&#1585;&#1576; &#1575;&#1604;&#1606;&#1610;&#1604;<\/t><\/is><\/c><c r=\"B29\" s=\"26\" t=\"n\"><\/c><c r=\"C29\" s=\"20\" t=\"n\"><\/c><c r=\"D29\" s=\"26\" t=\"n\"><\/c><c r=\"E29\" s=\"20\" t=\"n\"><\/c><c r=\"F29\" s=\"26\" t=\"n\"><\/c><c r=\"G29\" s=\"9\" t=\"n\"><\/c><c r=\"H29\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"30\" ht=\"22\" customHeight=\"1\"><c r=\"A30\" s=\"8\" t=\"inlineStr\"><is><t>Deworming / &#1575;&#1604;&#1583;&#1610;&#1583;&#1575;&#1606; (&#1605;&#1590;&#1575;&#1583; &#1575;&#1604;&#1583;&#1610;&#1583;&#1575;&#1606;)<\/t><\/is><\/c><c r=\"B30\" s=\"26\" t=\"n\"><\/c><c r=\"C30\" s=\"20\" t=\"n\"><\/c><c r=\"D30\" s=\"26\" t=\"n\"><\/c><c r=\"E30\" s=\"20\" t=\"n\"><\/c><c r=\"F30\" s=\"26\" t=\"n\"><\/c><c r=\"G30\" s=\"9\" t=\"n\"><\/c><c r=\"H30\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"31\" ht=\"22\" customHeight=\"1\"><c r=\"A31\" s=\"8\" t=\"inlineStr\"><is><t>Other / &#1571;&#1582;&#1585;&#1609;<\/t><\/is><\/c><c r=\"B31\" s=\"26\" t=\"n\"><\/c><c r=\"C31\" s=\"20\" t=\"n\"><\/c><c r=\"D31\" s=\"26\" t=\"n\"><\/c><c r=\"E31\" s=\"20\" t=\"n\"><\/c><c r=\"F31\" s=\"26\" t=\"n\"><\/c><c r=\"G31\" s=\"9\" t=\"n\"><\/c><c r=\"H31\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"32\"><\/row><row r=\"33\" ht=\"20\" customHeight=\"1\"><c r=\"A33\" s=\"12\" t=\"inlineStr\"><is><t>F. Diseases &amp; Injuries / &#1575;&#1604;&#1571;&#1605;&#1585;&#1575;&#1590; &#1608;&#1575;&#1604;&#1573;&#1589;&#1575;&#1576;&#1575;&#1578;<\/t><\/is><\/c><\/row><row r=\"34\" ht=\"30\" customHeight=\"1\"><c r=\"A34\" s=\"8\" t=\"inlineStr\"><is><t>Previous Diseases / &#1571;&#1605;&#1585;&#1575;&#1590; &#1587;&#1575;&#1576;&#1602;&#1577; &#9660;<\/t><\/is><\/c><c r=\"B34\" s=\"9\" t=\"n\"><\/c><c r=\"C34\" s=\"8\" t=\"inlineStr\"><is><t>Details / &#1575;&#1604;&#1578;&#1601;&#1575;&#1589;&#1610;&#1604;<\/t><\/is><\/c><c r=\"D34\" s=\"9\" t=\"n\"><\/c><c r=\"E34\" s=\"25\" t=\"n\"><\/c><c r=\"F34\" s=\"25\" t=\"n\"><\/c><c r=\"G34\" s=\"25\" t=\"n\"><\/c><c r=\"H34\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"35\" ht=\"30\" customHeight=\"1\"><c r=\"A35\" s=\"8\" t=\"inlineStr\"><is><t>Previous Injuries / &#1573;&#1589;&#1575;&#1576;&#1575;&#1578; &#1587;&#1575;&#1576;&#1602;&#1577; &#9660;<\/t><\/is><\/c><c r=\"B35\" s=\"9\" t=\"n\"><\/c><c r=\"C35\" s=\"8\" t=\"inlineStr\"><is><t>Details / &#1575;&#1604;&#1578;&#1601;&#1575;&#1589;&#1610;&#1604;<\/t><\/is><\/c><c r=\"D35\" s=\"9\" t=\"n\"><\/c><c r=\"E35\" s=\"25\" t=\"n\"><\/c><c r=\"F35\" s=\"25\" t=\"n\"><\/c><c r=\"G35\" s=\"25\" t=\"n\"><\/c><c r=\"H35\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"36\" ht=\"30\" customHeight=\"1\"><c r=\"A36\" s=\"8\" t=\"inlineStr\"><is><t>Current Injury / &#1575;&#1604;&#1573;&#1589;&#1575;&#1576;&#1577; &#1575;&#1604;&#1581;&#1575;&#1604;&#1610;&#1577; &#9660;<\/t><\/is><\/c><c r=\"B36\" s=\"9\" t=\"n\"><\/c><c r=\"C36\" s=\"8\" t=\"inlineStr\"><is><t>Type / &#1575;&#1604;&#1606;&#1608;&#1593; &#9660;<\/t><\/is><\/c><c r=\"D36\" s=\"9\" t=\"n\"><\/c><c r=\"E36\" s=\"8\" t=\"inlineStr\"><is><t>Location / &#1605;&#1608;&#1602;&#1593; &#1575;&#1604;&#1573;&#1589;&#1575;&#1576;&#1577;<\/t><\/is><\/c><c r=\"F36\" s=\"9\" t=\"n\"><\/c><c r=\"G36\" s=\"8\" t=\"inlineStr\"><is><t>Severity (1-5) / &#1575;&#1604;&#1583;&#1585;&#1580;&#1577; &#9660;<\/t><\/is><\/c><c r=\"H36\" s=\"10\" t=\"n\"><\/c><\/row><row r=\"37\"><\/row><row r=\"38\" ht=\"20\" customHeight=\"1\"><c r=\"A38\" s=\"6\" t=\"inlineStr\"><is><t>G. Treatment Plan / &#1575;&#1604;&#1582;&#1591;&#1577; &#1608;&#1575;&#1604;&#1593;&#1604;&#1575;&#1580;<\/t><\/is><\/c><\/row><row r=\"39\"><c r=\"A39\" s=\"23\" t=\"inlineStr\"><is><t>Date / &#1575;&#1604;&#1578;&#1575;&#1585;&#1610;&#1582;<\/t><\/is><\/c><c r=\"B39\" s=\"23\" t=\"inlineStr\"><is><t>Duration / &#1575;&#1604;&#1605;&#1583;&#1577;<\/t><\/is><\/c><c r=\"C39\" s=\"23\" t=\"inlineStr\"><is><t>Dosage / &#1575;&#1604;&#1580;&#1585;&#1593;&#1577;<\/t><\/is><\/c><c r=\"D39\" s=\"23\" t=\"inlineStr\"><is><t>Drug / Treatment / &#1575;&#1604;&#1593;&#1604;&#1575;&#1580;<\/t><\/is><\/c><c r=\"E39\" s=\"26\" t=\"n\"><\/c><c r=\"F39\" s=\"23\" t=\"inlineStr\"><is><t>Notes / &#1605;&#1604;&#1575;&#1581;&#1592;&#1575;&#1578;<\/t><\/is><\/c><c r=\"G39\" s=\"25\" t=\"n\"><\/c><c r=\"H39\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"40\" ht=\"22\" customHeight=\"1\"><c r=\"A40\" s=\"20\" t=\"n\"><\/c><c r=\"B40\" s=\"10\" t=\"n\"><\/c><c r=\"C40\" s=\"10\" t=\"n\"><\/c><c r=\"D40\" s=\"9\" t=\"n\"><\/c><c r=\"E40\" s=\"26\" t=\"n\"><\/c><c r=\"F40\" s=\"9\" t=\"n\"><\/c><c r=\"G40\" s=\"25\" t=\"n\"><\/c><c r=\"H40\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"41\" ht=\"22\" customHeight=\"1\"><c r=\"A41\" s=\"20\" t=\"n\"><\/c><c r=\"B41\" s=\"10\" t=\"n\"><\/c><c r=\"C41\" s=\"10\" t=\"n\"><\/c><c r=\"D41\" s=\"9\" t=\"n\"><\/c><c r=\"E41\" s=\"26\" t=\"n\"><\/c><c r=\"F41\" s=\"9\" t=\"n\"><\/c><c r=\"G41\" s=\"25\" t=\"n\"><\/c><c r=\"H41\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"42\" ht=\"22\" customHeight=\"1\"><c r=\"A42\" s=\"20\" t=\"n\"><\/c><c r=\"B42\" s=\"10\" t=\"n\"><\/c><c r=\"C42\" s=\"10\" t=\"n\"><\/c><c r=\"D42\" s=\"9\" t=\"n\"><\/c><c r=\"E42\" s=\"26\" t=\"n\"><\/c><c r=\"F42\" s=\"9\" t=\"n\"><\/c><c r=\"G42\" s=\"25\" t=\"n\"><\/c><c r=\"H42\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"43\" ht=\"22\" customHeight=\"1\"><c r=\"A43\" s=\"20\" t=\"n\"><\/c><c r=\"B43\" s=\"10\" t=\"n\"><\/c><c r=\"C43\" s=\"10\" t=\"n\"><\/c><c r=\"D43\" s=\"9\" t=\"n\"><\/c><c r=\"E43\" s=\"26\" t=\"n\"><\/c><c r=\"F43\" s=\"9\" t=\"n\"><\/c><c r=\"G43\" s=\"25\" t=\"n\"><\/c><c r=\"H43\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"44\" ht=\"22\" customHeight=\"1\"><c r=\"A44\" s=\"20\" t=\"n\"><\/c><c r=\"B44\" s=\"10\" t=\"n\"><\/c><c r=\"C44\" s=\"10\" t=\"n\"><\/c><c r=\"D44\" s=\"9\" t=\"n\"><\/c><c r=\"E44\" s=\"26\" t=\"n\"><\/c><c r=\"F44\" s=\"9\" t=\"n\"><\/c><c r=\"G44\" s=\"25\" t=\"n\"><\/c><c r=\"H44\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"45\" ht=\"22\" customHeight=\"1\"><c r=\"A45\" s=\"20\" t=\"n\"><\/c><c r=\"B45\" s=\"10\" t=\"n\"><\/c><c r=\"C45\" s=\"10\" t=\"n\"><\/c><c r=\"D45\" s=\"9\" t=\"n\"><\/c><c r=\"E45\" s=\"26\" t=\"n\"><\/c><c r=\"F45\" s=\"9\" t=\"n\"><\/c><c r=\"G45\" s=\"25\" t=\"n\"><\/c><c r=\"H45\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"46\"><\/row><row r=\"47\" ht=\"20\" customHeight=\"1\"><c r=\"A47\" s=\"12\" t=\"inlineStr\"><is><t>H. Recommendations / &#1575;&#1604;&#1578;&#1608;&#1589;&#1610;&#1575;&#1578;<\/t><\/is><\/c><\/row><row r=\"48\" ht=\"30\" customHeight=\"1\"><c r=\"A48\" s=\"8\" t=\"inlineStr\"><is><t>Suitable for Jumping / &#1610;&#1589;&#1604;&#1581; &#1604;&#1604;&#1602;&#1601;&#1586; &#9660;<\/t><\/is><\/c><c r=\"B48\" s=\"9\" t=\"n\"><\/c><c r=\"C48\" s=\"8\" t=\"inlineStr\"><is><t>Suitable for Flatwork / &#1610;&#1589;&#1604;&#1581; &#1604;&#1604;&#1578;&#1583;&#1585;&#1610;&#1576; &#1575;&#1604;&#1571;&#1585;&#1590;&#1610; &#9660;<\/t><\/is><\/c><c r=\"D48\" s=\"9\" t=\"n\"><\/c><c r=\"E48\" s=\"8\" t=\"inlineStr\"><is><t>Type of Equestrian Sport / &#1606;&#1608;&#1593; &#1575;&#1604;&#1585;&#1610;&#1575;&#1590;&#1577; &#9660;<\/t><\/is><\/c><c r=\"F48\" s=\"9\" t=\"n\"><\/c><c r=\"G48\" s=\"25\" t=\"n\"><\/c><c r=\"H48\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"49\" ht=\"30\" customHeight=\"1\"><c r=\"A49\" s=\"8\" t=\"inlineStr\"><is><t>Next Review / &#1605;&#1585;&#1575;&#1580;&#1593;&#1577; &#1602;&#1575;&#1583;&#1605;&#1577;<\/t><\/is><\/c><c r=\"B49\" s=\"20\" t=\"n\"><\/c><c r=\"C49\" s=\"8\" t=\"inlineStr\"><is><t>Back to Training After / &#1593;&#1608;&#1583;&#1577; &#1604;&#1604;&#1578;&#1583;&#1585;&#1610;&#1576; &#1576;&#1593;&#1583;<\/t><\/is><\/c><c r=\"D49\" s=\"20\" t=\"n\"><\/c><c r=\"E49\" s=\"8\" t=\"inlineStr\"><is><t>Veterinarian / &#1575;&#1604;&#1591;&#1576;&#1610;&#1576; &#1575;&#1604;&#1576;&#1610;&#1591;&#1585;&#1610;<\/t><\/is><\/c><c r=\"F49\" s=\"9\" t=\"n\"><\/c><c r=\"G49\" s=\"25\" t=\"n\"><\/c><c r=\"H49\" s=\"26\" t=\"n\"><\/c><\/row><row r=\"50\" ht=\"34\" customHeight=\"1\"><c r=\"A50\" s=\"8\" t=\"inlineStr\"><is><t>Signature / &#1575;&#1604;&#1578;&#1608;&#1602;&#1610;&#1593;<\/t><\/is><\/c><c r=\"B50\" s=\"9\" t=\"n\"><\/c><c r=\"C50\" s=\"25\" t=\"n\"><\/c><c r=\"D50\" s=\"26\" t=\"n\"><\/c><c r=\"E50\" s=\"8\" t=\"inlineStr\"><is><t>Date / &#1575;&#1604;&#1578;&#1575;&#1585;&#1610;&#1582;<\/t><\/is><\/c><c r=\"F50\" s=\"20\" t=\"n\"><\/c><\/row><row r=\"51\"><\/row><row r=\"52\" ht=\"20\" customHeight=\"1\"><c r=\"A52\" s=\"6\" t=\"inlineStr\"><is><t>I. Notes / &#1605;&#1604;&#1575;&#1581;&#1592;&#1575;&#1578;<\/t><\/is><\/c><\/row><row r=\"53\"><c r=\"A53\" s=\"24\" t=\"n\"><\/c><c r=\"B53\" s=\"27\" t=\"n\"><\/c><c r=\"C53\" s=\"27\" t=\"n\"><\/c><c r=\"D53\" s=\"27\" t=\"n\"><\/c><c r=\"E53\" s=\"27\" t=\"n\"><\/c><c r=\"F53\" s=\"27\" t=\"n\"><\/c><c r=\"G53\" s=\"27\" t=\"n\"><\/c><c r=\"H53\" s=\"28\" t=\"n\"><\/c><\/row><row r=\"54\"><c r=\"A54\" s=\"29\" t=\"n\"><\/c><c r=\"H54\" s=\"30\" t=\"n\"><\/c><\/row><row r=\"55\"><c r=\"A55\" s=\"29\" t=\"n\"><\/c><c r=\"H55\" s=\"30\" t=\"n\"><\/c><\/row><row r=\"56\"><c r=\"A56\" s=\"29\" t=\"n\"><\/c><c r=\"H56\" s=\"30\" t=\"n\"><\/c><\/row><row r=\"57\"><c r=\"A57\" s=\"31\" t=\"n\"><\/c><c r=\"B57\" s=\"32\" t=\"n\"><\/c><c r=\"C57\" s=\"32\" t=\"n\"><\/c><c r=\"D57\" s=\"32\" t=\"n\"><\/c><c r=\"E57\" s=\"32\" t=\"n\"><\/c><c r=\"F57\" s=\"32\" t=\"n\"><\/c><c r=\"G57\" s=\"32\" t=\"n\"><\/c><c r=\"H57\" s=\"33\" t=\"n\"><\/c><\/row><\/sheetData><mergeCells count=\"62\"><mergeCell ref=\"A53:H57\"/><mergeCell ref=\"D35:H35\"/><mergeCell ref=\"A30:B30\"/><mergeCell ref=\"C30:D30\"/><mergeCell ref=\"B9:H9\"/><mergeCell ref=\"D34:H34\"/><mergeCell ref=\"F42:H42\"/><mergeCell ref=\"F45:H45\"/><mergeCell ref=\"F41:H41\"/><mergeCell ref=\"G27:H27\"/><mergeCell ref=\"A11:H11\"/><mergeCell ref=\"D40:E40\"/><mergeCell ref=\"C26:D26\"/><mergeCell ref=\"D45:E45\"/><mergeCell ref=\"A6:H6\"/><mergeCell ref=\"F23:H23\"/><mergeCell ref=\"C29:D29\"/><mergeCell ref=\"E29:F29\"/><mergeCell ref=\"A25:H25\"/><mergeCell ref=\"E28:F28\"/><mergeCell ref=\"F43:H43\"/><mergeCell ref=\"G28:H28\"/><mergeCell ref=\"D41:E41\"/><mergeCell ref=\"F48:H48\"/><mergeCell ref=\"A27:B27\"/><mergeCell ref=\"C31:D31\"/><mergeCell ref=\"F39:H39\"/><mergeCell ref=\"E31:F31\"/><mergeCell ref=\"A26:B26\"/><mergeCell ref=\"A3:H3\"/><mergeCell ref=\"A21:H21\"/><mergeCell ref=\"E30:F30\"/><mergeCell ref=\"G30:H30\"/><mergeCell ref=\"F49:H49\"/><mergeCell ref=\"D43:E43\"/><mergeCell ref=\"A2:H2\"/><mergeCell ref=\"F1:H1\"/><mergeCell ref=\"C27:D27\"/><mergeCell ref=\"B50:D50\"/><mergeCell ref=\"E27:F27\"/><mergeCell ref=\"A33:H33\"/><mergeCell ref=\"A47:H47\"/><mergeCell ref=\"F44:H44\"/><mergeCell ref=\"E26:F26\"/><mergeCell ref=\"G26:H26\"/><mergeCell ref=\"A17:H17\"/><mergeCell ref=\"G29:H29\"/><mergeCell ref=\"A4:H4\"/><mergeCell ref=\"B14:H14\"/><mergeCell ref=\"D39:E39\"/><mergeCell ref=\"F19:H19\"/><mergeCell ref=\"A29:B29\"/><mergeCell ref=\"A1:C1\"/><mergeCell ref=\"D42:E42\"/><mergeCell ref=\"A38:H38\"/><mergeCell ref=\"A52:H52\"/><mergeCell ref=\"A28:B28\"/><mergeCell ref=\"C28:D28\"/><mergeCell ref=\"F40:H40\"/><mergeCell ref=\"G31:H31\"/><mergeCell ref=\"A31:B31\"/><mergeCell ref=\"D44:E44\"/><\/mergeCells><conditionalFormatting sqref=\"B22\"><cfRule type=\"expression\" priority=\"1\" dxfId=\"0\"><formula>AND(B22&lt;&gt;\"\",OR(B22&lt;37.5,B22&gt;38.5))<\/formula><\/cfRule><\/conditionalFormatting><conditionalFormatting sqref=\"D22\"><cfRule type=\"expression\" priority=\"2\" dxfId=\"0\"><formula>AND(D22&lt;&gt;\"\",OR(D22&lt;28,D22&gt;44))<\/formula><\/cfRule><\/conditionalFormatting><conditionalFormatting sqref=\"F22\"><cfRule type=\"expression\" priority=\"3\" dxfId=\"0\"><formula>AND(F22&lt;&gt;\"\",OR(F22&lt;8,F22&gt;16))<\/formula><\/cfRule><\/conditionalFormatting><conditionalFormatting sqref=\"F23\"><cfRule type=\"expression\" priority=\"4\" dxfId=\"0\"><formula>LEFT(F23,5)=\"Check\"<\/formula><\/cfRule><\/conditionalFormatting><dataValidations count=\"15\"><dataValidation sqref=\"B8\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Stallion / &#1601;&#1581;&#1604;,Mare / &#1601;&#1585;&#1587;,Gelding / &#1581;&#1589;&#1575;&#1606;\"<\/formula1><\/dataValidation><dataValidation sqref=\"D8\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Arabian / &#1593;&#1585;&#1576;&#1610;,Thoroughbred / &#1573;&#1606;&#1580;&#1604;&#1610;&#1586;&#1610;,Crossbred / &#1605;&#1607;&#1580;&#1606;,Other / &#1571;&#1582;&#1585;&#1609;\"<\/formula1><\/dataValidation><dataValidation sqref=\"D15\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"1,2,3,4,5,6,7,8,9\"<\/formula1><\/dataValidation><dataValidation sqref=\"D18\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Full / &#1603;&#1575;&#1605;&#1604;,Front / &#1571;&#1605;&#1575;&#1605;&#1610;,Hind / &#1582;&#1604;&#1601;&#1610;\"<\/formula1><\/dataValidation><dataValidation sqref=\"F18\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Regular / &#1593;&#1575;&#1583;&#1610;,Therapeutic / &#1591;&#1576;&#1610;\"<\/formula1><\/dataValidation><dataValidation sqref=\"B19\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Standard / &#1593;&#1575;&#1583;&#1610;&#1577;,Therapeutic / &#1581;&#1583;&#1608;&#1577; &#1591;&#1576;&#1610;&#1577;,Clips / &#1605;&#1588;&#1576;&#1603;,Other / &#1571;&#1582;&#1585;&#1609;\"<\/formula1><\/dataValidation><dataValidation sqref=\"D19\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Good / &#1580;&#1610;&#1583;&#1577;,Fair / &#1605;&#1602;&#1576;&#1608;&#1604;&#1577;,Needs Follow-up / &#1578;&#1581;&#1578;&#1575;&#1580; &#1605;&#1578;&#1575;&#1576;&#1593;&#1577;\"<\/formula1><\/dataValidation><dataValidation sqref=\"H22\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Pink / &#1608;&#1585;&#1583;&#1610;&#1577;,Pale / &#1588;&#1575;&#1581;&#1576;&#1577;,Cyanotic / &#1605;&#1586;&#1585;&#1602;&#1577;\"<\/formula1><\/dataValidation><dataValidation sqref=\"B23\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Normal / &#1591;&#1576;&#1610;&#1593;&#1610;,Lethargic / &#1582;&#1575;&#1605;&#1604;\"<\/formula1><\/dataValidation><dataValidation sqref=\"D23\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Normal / &#1591;&#1576;&#1610;&#1593;&#1610;,Reduced / &#1582;&#1601;&#1610;&#1601;,Absent / &#1605;&#1593;&#1583;&#1608;&#1605;\"<\/formula1><\/dataValidation><dataValidation sqref=\"B34 B35 B36\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"None / &#1604;&#1575; &#1610;&#1608;&#1580;&#1583;,Yes / &#1610;&#1608;&#1580;&#1583;\"<\/formula1><\/dataValidation><dataValidation sqref=\"D36\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Bone / &#1593;&#1592;&#1605;&#1610;,Muscle / &#1593;&#1590;&#1604;&#1610;,Joint / &#1605;&#1601;&#1589;&#1604;&#1610;,Skin / &#1580;&#1604;&#1583;&#1610;&#1577;,Other / &#1571;&#1582;&#1585;&#1609;\"<\/formula1><\/dataValidation><dataValidation sqref=\"H36\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"1,2,3,4,5\"<\/formula1><\/dataValidation><dataValidation sqref=\"B48 D48\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Yes / &#1606;&#1593;&#1605;,No / &#1604;&#1575;,With Caution / &#1576;&#1581;&#1584;&#1585;\"<\/formula1><\/dataValidation><dataValidation sqref=\"F48\" showDropDown=\"0\" showInputMessage=\"0\" showErrorMessage=\"0\" allowBlank=\"1\" type=\"list\"><formula1>\"Show Jumping / &#1602;&#1601;&#1586; &#1575;&#1604;&#1581;&#1608;&#1575;&#1580;&#1586;,Flatwork / Dressage / &#1578;&#1583;&#1585;&#1610;&#1576; &#1571;&#1585;&#1590;&#1610;,Eventing / &#1581;&#1583;&#1579; &#1588;&#1575;&#1605;&#1604;,Other / &#1571;&#1582;&#1585;&#1609;\"<\/formula1><\/dataValidation><\/dataValidations><printOptions horizontalCentered=\"1\"/><pageMargins left=\"0.3\" right=\"0.3\" top=\"1\" bottom=\"1\" header=\"0.5\" footer=\"0.5\"/><pageSetup orientation=\"portrait\" paperSize=\"9\" fitToHeight=\"1\" fitToWidth=\"1\"/><\/worksheet>", "xl/styles.xml": "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><numFmts count=\"2\"><numFmt numFmtId=\"164\" formatCode=\"0.0\"/><numFmt numFmtId=\"165\" formatCode=\"dd/mm/yyyy\"/><\/numFmts><fonts count=\"10\"><font><name val=\"Calibri\"/><family val=\"2\"/><color theme=\"1\"/><sz val=\"11\"/><scheme val=\"minor\"/><\/font><font><name val=\"Arial\"/><b val=\"1\"/><sz val=\"12\"/><\/font><font><name val=\"Arial\"/><b val=\"1\"/><sz val=\"16\"/><\/font><font><name val=\"Arial\"/><b val=\"1\"/><sz val=\"11\"/><\/font><font><name val=\"Arial\"/><i val=\"1\"/><color rgb=\"00595959\"/><sz val=\"8\"/><\/font><font><name val=\"Arial\"/><b val=\"1\"/><color rgb=\"00FFFFFF\"/><sz val=\"12\"/><\/font><font><name val=\"Arial\"/><b val=\"1\"/><sz val=\"9\"/><\/font><font><name val=\"Arial\"/><sz val=\"10\"/><\/font><font><name val=\"Arial\"/><b val=\"1\"/><color rgb=\"001F4E79\"/><sz val=\"10\"/><\/font><font><name val=\"Arial\"/><b val=\"1\"/><sz val=\"10\"/><\/font><\/fonts><fills count=\"8\"><fill><patternFill/><\/fill><fill><patternFill patternType=\"gray125\"/><\/fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"00C8102E\"/><\/patternFill><\/fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"00F2F2F2\"/><\/patternFill><\/fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"00FFF9DB\"/><\/patternFill><\/fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"00007A3D\"/><\/patternFill><\/fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"00E2EFDA\"/><\/patternFill><\/fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"00D9D9D9\"/><\/patternFill><\/fill><\/fills><borders count=\"11\"><border><left/><right/><top/><bottom/><diagonal/><\/border><border><left style=\"thin\"><color rgb=\"00808080\"/><\/left><right style=\"thin\"><color rgb=\"00808080\"/><\/right><top style=\"thin\"><color rgb=\"00808080\"/><\/top><bottom style=\"thin\"><color rgb=\"00808080\"/><\/bottom><\/border><border><left/><right/><top style=\"thin\"><color rgb=\"00808080\"/><\/top><bottom/><diagonal/><\/border><border><left style=\"thin\"><color rgb=\"00808080\"/><\/left><right/><top/><bottom/><diagonal/><\/border><border><left/><right style=\"thin\"><color rgb=\"00808080\"/><\/right><top style=\"thin\"><color rgb=\"00808080\"/><\/top><bottom/><diagonal/><\/border><border><left/><right style=\"thin\"><color rgb=\"00808080\"/><\/right><top/><bottom/><diagonal/><\/border><border><left style=\"thin\"><color rgb=\"00808080\"/><\/left><right/><top/><bottom style=\"thin\"><color rgb=\"00808080\"/><\/bottom><diagonal/><\/border><border><left/><right/><top/><bottom style=\"thin\"><color rgb=\"00808080\"/><\/bottom><diagonal/><\/border><border><left/><right style=\"thin\"><color rgb=\"00808080\"/><\/right><top/><bottom style=\"thin\"><color rgb=\"00808080\"/><\/bottom><diagonal/><\/border><border><left/><right/><top style=\"thin\"><color rgb=\"00808080\"/><\/top><bottom style=\"thin\"><color rgb=\"00808080\"/><\/bottom><diagonal/><\/border><border><left/><right style=\"thin\"><color rgb=\"00808080\"/><\/right><top style=\"thin\"><color rgb=\"00808080\"/><\/top><bottom style=\"thin\"><color rgb=\"00808080\"/><\/bottom><diagonal/><\/border><\/borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/><\/cellStyleXfs><cellXfs count=\"34\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"right\"/><\/xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"3\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"4\" fillId=\"0\" borderId=\"0\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"5\" fillId=\"2\" borderId=\"0\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment vertical=\"center\"/><\/xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"2\" borderId=\"0\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"6\" fillId=\"3\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"7\" fillId=\"4\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"7\" fillId=\"4\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"4\" borderId=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"5\" fillId=\"5\" borderId=\"0\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment vertical=\"center\"/><\/xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"5\" borderId=\"0\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"164\" fontId=\"7\" fillId=\"4\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"1\" fontId=\"7\" fillId=\"4\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"1\" fontId=\"3\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"1\" fontId=\"3\" fillId=\"6\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"8\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"165\" fontId=\"7\" fillId=\"4\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"1\" fontId=\"7\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"9\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"6\" fillId=\"7\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"4\" borderId=\"1\" applyAlignment=\"1\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"><alignment vertical=\"top\" wrapText=\"1\"/><\/xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"9\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"10\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"2\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"4\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"3\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"5\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"6\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"7\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"8\" pivotButton=\"0\" quotePrefix=\"0\" xfId=\"0\"/><\/cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\" hidden=\"0\"/><\/cellStyles><dxfs count=\"1\"><dxf><font><name val=\"Arial\"/><b val=\"1\"/><color rgb=\"009C0006\"/><\/font><fill><patternFill patternType=\"solid\"><fgColor rgb=\"00F8CBAD\"/><\/patternFill><\/fill><\/dxf><\/dxfs><tableStyles count=\"0\" defaultTableStyle=\"TableStyleMedium9\" defaultPivotStyle=\"PivotStyleLight16\"/><colors><indexedColors><rgbColor rgb=\"00000000\"/><rgbColor rgb=\"00FFFFFF\"/><rgbColor rgb=\"00FF0000\"/><rgbColor rgb=\"0000FF00\"/><rgbColor rgb=\"000000FF\"/><rgbColor rgb=\"00FFFF00\"/><rgbColor rgb=\"00FF00FF\"/><rgbColor rgb=\"0000FFFF\"/><rgbColor rgb=\"00000000\"/><rgbColor rgb=\"00FFFFFF\"/><rgbColor rgb=\"00FF0000\"/><rgbColor rgb=\"0000FF00\"/><rgbColor rgb=\"000000FF\"/><rgbColor rgb=\"00FFFF00\"/><rgbColor rgb=\"00FF00FF\"/><rgbColor rgb=\"0000FFFF\"/><rgbColor rgb=\"00800000\"/><rgbColor rgb=\"00008000\"/><rgbColor rgb=\"00000080\"/><rgbColor rgb=\"00808000\"/><rgbColor rgb=\"00800080\"/><rgbColor rgb=\"00008080\"/><rgbColor rgb=\"00C0C0C0\"/><rgbColor rgb=\"00808080\"/><rgbColor rgb=\"009999FF\"/><rgbColor rgb=\"00993366\"/><rgbColor rgb=\"00FFFFCC\"/><rgbColor rgb=\"00CCFFFF\"/><rgbColor rgb=\"00660066\"/><rgbColor rgb=\"00FF8080\"/><rgbColor rgb=\"000066CC\"/><rgbColor rgb=\"00CCCCFF\"/><rgbColor rgb=\"00000080\"/><rgbColor rgb=\"00FF00FF\"/><rgbColor rgb=\"00FFFF00\"/><rgbColor rgb=\"0000FFFF\"/><rgbColor rgb=\"00800080\"/><rgbColor rgb=\"00800000\"/><rgbColor rgb=\"00008080\"/><rgbColor rgb=\"000000FF\"/><rgbColor rgb=\"0000CCFF\"/><rgbColor rgb=\"00CCFFFF\"/><rgbColor rgb=\"00CCFFCC\"/><rgbColor rgb=\"00FFFF99\"/><rgbColor rgb=\"0099CCFF\"/><rgbColor rgb=\"00FF99CC\"/><rgbColor rgb=\"00CC99FF\"/><rgbColor rgb=\"00FFCC99\"/><rgbColor rgb=\"003366FF\"/><rgbColor rgb=\"0033CCCC\"/><rgbColor rgb=\"0099CC00\"/><rgbColor rgb=\"00FFCC00\"/><rgbColor rgb=\"00FF9900\"/><rgbColor rgb=\"00FF6600\"/><rgbColor rgb=\"00666699\"/><rgbColor rgb=\"00969696\"/><rgbColor rgb=\"00003366\"/><rgbColor rgb=\"00339966\"/><rgbColor rgb=\"00003300\"/><rgbColor rgb=\"00333300\"/><rgbColor rgb=\"00993300\"/><rgbColor rgb=\"00993366\"/><rgbColor rgb=\"00333399\"/><rgbColor rgb=\"00333333\"/><\/indexedColors><\/colors><\/styleSheet>", "_rels/.rels": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\" Id=\"rId1\"/><Relationship Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"docProps/core.xml\" Id=\"rId2\"/><Relationship Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties\" Target=\"docProps/app.xml\" Id=\"rId3\"/><\/Relationships>", "xl/workbook.xml": "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><workbookPr/><workbookProtection/><bookViews><workbookView visibility=\"visible\" minimized=\"0\" showHorizontalScroll=\"1\" showVerticalScroll=\"1\" showSheetTabs=\"1\" tabRatio=\"600\" firstSheet=\"0\" activeTab=\"0\" autoFilterDateGrouping=\"1\"/><\/bookViews><sheets><sheet xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" name=\"Horse File\" sheetId=\"1\" state=\"visible\" r:id=\"rId1\"/><\/sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"0\">'Horse File'!$A$1:$H$57<\/definedName><\/definedNames><calcPr calcId=\"124519\" fullCalcOnLoad=\"1\"/><\/workbook>", "xl/_rels/workbook.xml.rels": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"/xl/worksheets/sheet1.xml\" Id=\"rId1\"/><Relationship Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\" Id=\"rId2\"/><Relationship Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"theme/theme1.xml\" Id=\"rId3\"/><\/Relationships>", "[Content_Types].xml": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/><Override PartName=\"/xl/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><\/Types>"}, "map": {"name": "B7", "microchip": "D7", "militaryNo": "F7", "age": "H7", "sex": "B8", "breed": "D8", "color": "F8", "rider": "H8", "purpose": "B9", "lengthIn": "B12", "girthIn": "D12", "divisor": "F12", "lbPerKg": "H12", "manualKg": "F13", "heightHands": "B15", "bcs": "D15", "weightDate": "F15", "lastShoeing": "B18", "shoeType": "D18", "shoeing": "F18", "horseshoe": "B19", "hoof": "D19", "preShoeNotes": "F19", "mm": "H22", "behavior": "B23", "appetite": "D23", "curInj": "B36", "injType": "D36", "injLoc": "F36", "injSev": "H36", "jump": "B48", "flat": "D48", "sport": "F48", "nextReview": "B49", "backToTraining": "D49", "vet": "F49", "temp": "B22", "pulse": "D22", "resp": "F22", "prevDis": "B34", "prevDisDetails": "D34", "prevInj": "B35", "prevInjDetails": "D35", "fileDate": "F50", "notes": "A53", "vacc": [{"last": "C27", "next": "E27", "notes": "G27"}, {"last": "C28", "next": "E28", "notes": "G28"}, {"last": "C29", "next": "E29", "notes": "G29"}, {"last": "C30", "next": "E30", "notes": "G30"}, {"last": "C31", "next": "E31", "notes": "G31"}], "treat": [{"date": "A40", "duration": "B40", "dose": "C40", "drug": "D40", "notes": "F40"}, {"date": "A41", "duration": "B41", "dose": "C41", "drug": "D41", "notes": "F41"}, {"date": "A42", "duration": "B42", "dose": "C42", "drug": "D42", "notes": "F42"}, {"date": "A43", "duration": "B43", "dose": "C43", "drug": "D43", "notes": "F43"}, {"date": "A44", "duration": "B44", "dose": "C44", "drug": "D44", "notes": "F44"}, {"date": "A45", "duration": "B45", "dose": "C45", "drug": "D45", "notes": "F45"}]}, "sheet": "xl/worksheets/sheet1.xml", "lastRow": 57};
 /* ---------- Comprehensive file in FORM LAYOUT (.xlsx) ---------- */
@@ -558,12 +883,13 @@ $("#btnFormX").onclick=()=>{
 
 /* ---------- REPORTS: all horses ---------- */
 const NA="Not available / غير متوفر";
-const lbl = k => { const el=document.querySelector(`[data-k="${k}"]`); return el? el.closest(".f").querySelector("label").textContent.trim() : k; };
+const lbl = k => { const el=document.querySelector(`[data-k="${k}"]`); if(!el) return k; const L=el.closest(".f").querySelector("label"), en=L.querySelector(".en"), ar=L.querySelector(".ar");
+  return en&&ar ? `${en.textContent.trim()} / ${ar.textContent.trim()}` : L.textContent.trim(); };
 const days = d => d? Math.floor((Date.now()-new Date(d))/864e5) : null;
 async function collectAll(){
   const [visits,prev]=ONLINE? await Promise.all([store.all(SETTINGS.visits),store.all(SETTINGS.preventive)]) : [[],[]];
   const L=await horseIndex(visits);
-  const out=L.map(h=>{ const m=assemble(h,visits.filter(v=>sameHorse(v,h)),prev.filter(p=>sameHorse(p,h)));
+  const out=L.map(h=>{ const m=assemble(h,visits.filter(v=>isHorse(v,h)),prev.filter(p=>isHorse(p,h)));
     if(m._weight){ m.weightKg=m.weightKg||m._weight.kg; if(!m.manualKg&&!(m.lengthIn&&m.girthIn)) m.manualKg=m._weight.kg; }
     if(m.manualKg&&!m.weightKg) m.weightKg=m.manualKg;
     if(m.lengthIn&&m.girthIn&&!m.estimatedKg){ const lb=m.lengthIn*m.girthIn*m.girthIn/(+m.divisor||300); m.estimatedKg=Math.round(lb/(+m.lbPerKg||2.2)); if(!m.manualKg) m.weightKg=m.estimatedKg; }
@@ -639,6 +965,11 @@ $("#repGo").onclick=async()=>{ try{ await downloadReport(document.querySelector(
   catch(e){ console.error(e); alert("Report failed / فشل التقرير: "+e.message); } };
 
 calcWeight();
+// open directly: horse-file.html?pid=..&name=..  (&recs=1 → saved records, ?list=1 → horse list)
+{ const u=new URLSearchParams(location.search), pid=u.get("pid"), nm=u.get("name");
+  if(u.get("list")) showList();
+  else if(pid||nm){ $("#openQ").value=nm||pid; await findAndOffer(nm||pid); if(u.get("recs")) showRecords(nm||pid); }
+  else if(u.get("recs")) showRecords(""); }
 </script>
 </body>
 </html>
