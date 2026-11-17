@@ -454,7 +454,7 @@ function newRx(){ return {date:today(), status:"Old", pid:"", name:"", sex:"", b
   pregN:"", pregU:"Months", temp:"", resp:"", pr:"", tempEx:"", respEx:"", prEx:"", tempPost:"", respPost:"", prPost:"", vgroup:"", complaint:"", td:"", dtype:"", disease:"", tests:[], invest:"", invList:[], notes:"", lines:[{cat:"",med:"",opt:"",ov:{},instr:""}], advice:"", vet:"", saved:false}; }
 function saveDraft(){ try{ localStorage.setItem("rxDraft", JSON.stringify(RX)); }catch(e){} }
 function loadDraft(){ try{ const s = localStorage.getItem("rxDraft"); return s ? JSON.parse(s) : null; }catch(e){ return null; } }
-function opts(arr, sel, blank=true){ return (blank?'<option value=""></option>':'') + arr.map(v => `<option${v===sel?" selected":""}>${esc(v)}</option>`).join(""); }
+function opts(arr, sel, blank=true){ arr = arr || []; if (sel !== undefined && sel !== null && sel !== "" && !arr.some(v => String(v) === String(sel))) arr = [...arr, sel]; /* a typed "other" value stays selected */ return (blank?'<option value=""></option>':'') + arr.map(v => `<option${v===sel?" selected":""}>${esc(v)}</option>`).join(""); }
 function ageText(birth, at){ if(!birth) return ""; const b=new Date(birth), a=new Date(at||today()); if(isNaN(b)) return ""; let m=(a.getFullYear()-b.getFullYear())*12+(a.getMonth()-b.getMonth()); if(a.getDate()<b.getDate()) m--; if(m<0) return ""; return m>=12? `${Math.floor(m/12)} y ${m%12} m` : `${m} m`; }
 function prevVisits(){
   const p = {pid:RX.pid, name:RX.name};
@@ -463,8 +463,10 @@ function prevVisits(){
 }
 function renderRx(main){
   const l = L(), P = RX;
-  const names = [...new Set([...S.visits.map(v=>v.name), ...(S.horses||[]).flatMap(h=>[h.name, h.nameEn])].filter(Boolean))].sort();
-  const ids = [...new Set([...S.visits.map(v=>v.pid), ...(S.horses||[]).map(h=>h.pid)].filter(Boolean))].sort();
+  const names = [...new Set([...S.visits.map(v=>v.name), ...(S.horses||[]).flatMap(h=>[h.name, h.nameEn, ...(Array.isArray(h.aliases)?h.aliases:[])]), ...(S.horseFiles||[]).flatMap(r=>[r.name, r.nameEn])].filter(Boolean))].sort();
+  const ids = [...new Set([...S.visits.map(v=>v.pid), ...(S.horses||[]).map(h=>h.pid), ...(S.horseFiles||[]).map(r=>r.pid)].filter(Boolean))].sort();
+  const nameLab = n => { const h = horseRec({name:n}); return h ? [h.pid && "ID " + h.pid, hk(h.name) === hk(n) ? h.nameEn : h.name].filter(Boolean).join(" · ") : ""; };
+  const idLab = id => { const h = horseRec({pid:id}); return h ? [h.name, h.nameEn].filter(Boolean).join(" · ") : ""; };
   const dz = diseasesAll(), dtypes = l.diseaseTypes || [...new Set(dz.map(d=>d.t))];
   main.innerHTML = `
   <div class="panel"><div class="row"><h2 style="margin:0">New prescription</h2><span class="spacer"></span>
@@ -485,6 +487,8 @@ function renderRx(main){
       <label>Age<input id="f_age" value="${esc(ageText(P.birth,P.date))}" disabled></label>
       <label for="f_type">Type<select id="f_type">${opts(l.ptypes,P.type,false)}</select></label>
       <label for="f_bwt">BWT (kg)<input id="f_bwt" type="number" min="0" step="any" value="${esc(P.bwt)}"></label>
+      <label for="f_hcat">Category / purpose<input id="f_hcat" list="dl_rxcat" value="${esc(P.category||"")}" autocomplete="off"></label>
+      <label for="f_hsrc">Source<input id="f_hsrc" list="dl_rxsrc" value="${esc(P.source||"")}" autocomplete="off"></label>
       <label for="f_cond">Condition<select id="f_cond">${opts(l.conditions,P.cond)}</select></label>
       <label for="f_preg">Pregnant?<select id="f_preg">${opts(["No","Yes"],P.preg,false)}</select></label>
       <div><span class="lbl">Pregnancy stage</span><div class="row" style="gap:6px;flex-wrap:nowrap">
@@ -492,9 +496,11 @@ function renderRx(main){
         <select id="f_pregU" aria-label="Pregnancy unit" style="flex:1">${opts(["Days","Weeks","Months"],P.pregU||"Months",false)}</select></div></div>
       <div id="pregInfo" class="small" style="grid-column:1/-1"></div>
     </div>
-    <datalist id="dl_names">${names.map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
-    <datalist id="dl_ids">${ids.map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
+    <datalist id="dl_names">${names.map(n=>`<option value="${esc(n)}">${esc(nameLab(n))}</option>`).join("")}</datalist>
+    <datalist id="dl_ids">${ids.map(n=>`<option value="${esc(n)}">${esc(idLab(n))}</option>`).join("")}</datalist>
     <datalist id="dl_breeds">${(l.breeds||[]).map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
+    <datalist id="dl_rxcat">${[...new Set([...HCATS.map(c=>c[0]), ...(S.horses||[]).map(h=>h.category)].filter(Boolean))].map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
+    <datalist id="dl_rxsrc">${[...new Set(["مستوردة / Imported","انتاج الفروسية / Equestrian production","مهداة / Gifted", ...(S.horses||[]).map(h=>h.source)].filter(Boolean))].map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
     <div id="prevBox" style="margin-top:10px"></div>
   </div>
   <div class="panel"><h2>Clinical details</h2>
@@ -520,10 +526,11 @@ function renderRx(main){
     <div class="row" style="margin-top:12px"><h3 style="margin:0">Investigations done &amp; results</h3><span class="spacer"></span><button type="button" id="btnAddInv">+ Add investigation</button></div>
     <div id="invBox" style="margin-top:6px"></div>
   </div></div>
-  <div class="panel"><div class="row"><h2 style="margin:0">Rx – medicines</h2><span class="spacer"></span><button id="btnAddLine">+ Add medicine</button></div>
+  <div class="panel"><div class="row"><h2 style="margin:0">Rx – medicines</h2></div>
     <div class="info" id="rxSummary" style="margin:8px 0"></div>
     <p class="small muted">Pick the category, then the medicine (stock shown), then the dose. Leave the dose blank for the default adult/foal dose. Override boxes are optional.</p>
     <div id="lines"></div>
+    <div class="row" style="margin:8px 0;justify-content:center"><button id="btnAddLine" class="pri">+ Add medicine</button></div>
     <div id="prevAuto" class="pvauto" hidden></div>
     <label for="f_advice">Advice (printed on the prescription)<textarea id="f_advice">${esc(P.advice)}</textarea></label>
   </div>
@@ -547,7 +554,7 @@ function renderRx(main){
   drawLines(); drawInv(); refreshRxCalc(); fillDisease(); drawPrev(); drawVitals(); drawPreg(); drawRxMedia();
 }
 function bindRx(){
-  const map = {f_status:"status",f_date:"date",f_pid:"pid",f_name:"name",f_sex:"sex",f_breed:"breed",f_birth:"birth",f_type:"type",f_bwt:"bwt",f_cond:"cond",f_preg:"preg",f_pregN:"pregN",f_pregU:"pregU",f_temp:"temp",f_resp:"resp",f_pr:"pr",f_tempEx:"tempEx",f_respEx:"respEx",f_prEx:"prEx",f_tempPost:"tempPost",f_respPost:"respPost",f_prPost:"prPost",f_complaint:"complaint",f_td:"td",f_advice:"advice",f_notes:"notes"};
+  const map = {f_hcat:"category",f_hsrc:"source",f_status:"status",f_date:"date",f_pid:"pid",f_name:"name",f_sex:"sex",f_breed:"breed",f_birth:"birth",f_type:"type",f_bwt:"bwt",f_cond:"cond",f_preg:"preg",f_pregN:"pregN",f_pregU:"pregU",f_temp:"temp",f_resp:"resp",f_pr:"pr",f_tempEx:"tempEx",f_respEx:"respEx",f_prEx:"prEx",f_tempPost:"tempPost",f_respPost:"respPost",f_prPost:"prPost",f_complaint:"complaint",f_td:"td",f_advice:"advice",f_notes:"notes"};
   Object.entries(map).forEach(([id,k]) => { const el = document.getElementById(id); el.addEventListener("input", () => {
     RX[k] = el.value; saveDraft();
     if (k==="birth"||k==="date") $("#f_age").value = ageText(RX.birth, RX.date);
@@ -573,7 +580,8 @@ function bindRx(){
     addTest(v); };
   $("#btnTstAdd").onclick = typed; $("#f_tstType").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); typed(); } });
   $("#btnAddInv").onclick = () => { ensureInv(RX, RX.date).push({test:"", date:RX.date, result:""}); saveDraft(); drawInv(); const t = $("#invBox").querySelectorAll('[data-ik="test"]'); if (t.length) t[t.length-1].focus(); };
-  $("#btnAddLine").onclick = () => { RX.lines.push({cat:"",med:"",opt:"",ov:{},instr:""}); saveDraft(); drawLines(); refreshRxCalc(); };
+  $("#btnAddLine").onclick = () => { RX.lines.push({cat:"",med:"",opt:"",ov:{},instr:""}); saveDraft(); drawLines(); refreshRxCalc();
+    const nl = $("#ln" + (RX.lines.length - 1)); if (nl) { nl.scrollIntoView({behavior:"smooth", block:"center"}); const f = nl.querySelector("select,input"); if (f) setTimeout(() => f.focus({preventScroll:true}), 300); } };
   $("#btnNew").onclick = () => confirmBox("Start a new case? The current form will be cleared (saved cases stay in History)." + (PEND.length ? ` ${PEND.length} unsaved photo(s)/video(s) will be removed.` : ""), () => { Object.keys(RX).forEach(k=>delete RX[k]); Object.assign(RX, newRx()); PEND = []; saveDraft(); render(true); });
   $("#btnSave").onclick = saveCase;
   $("#btnDl").onclick = downloadRx;
@@ -621,20 +629,22 @@ document.addEventListener("input", e => { if (e.target && /^f_(pid|name)$/.test(
 function drawPrev(){
   const box = $("#prevBox"); if (!box) return;
   if (!RX.pid && !RX.name) { FOUND_KEY = ""; box.innerHTML = `<p class="small muted">Type the ID or name (Arabic or English) – everything available for that horse pops up here, with a <b>Fill all</b> button.</p>`; return; }
-  const pv = prevVisits(), hr = horseRec(RX), hw = hfWeight(RX);
+  const pv = prevVisits(), hr = horseRec(RX), hw = hfWeight(RX), fr = hr ? null : fileRec(RX);
   if (hw && !RX.bwt) { RX.bwt = hw.kg; const bi = $("#f_bwt"); if (bi) bi.value = hw.kg; saveDraft(); setTimeout(() => { if (typeof refreshRxCalc === "function") refreshRxCalc(); }, 0); }
   const last = pv[0] || {}, files = hFiles(RX);
   let card = "";
-  if (hr || pv.length) {
+  if (hr || pv.length || fr) {
     const d = rxFillData({pid:RX.pid, name:RX.name}, pv, hr, hw);
-    const LABS = {pid:"Patient ID", name:"Name", sex:"Sex", breed:"Breed", birth:"Birth date", type:"Type", bwt:"BWT (kg)", status:"New / Old"};
+    const LABS = {pid:"Patient ID", name:"Name", sex:"Sex", breed:"Breed", birth:"Birth date", type:"Type", bwt:"BWT (kg)", category:"Category", source:"Source", status:"New / Old"};
     if (!RX.name && hr && hr.name && !d.name) d.name = hr.name;
     const changes = Object.keys(d).filter(k => LABS[k] && String(RX[k] ?? "") !== d[k]);
-    const nm = hr ? [hr.name, hr.nameEn].filter(Boolean).join(" / ") : (last.name || RX.name);
-    const age = hr && hr.birthYear ? new Date().getFullYear() - (+hr.birthYear) : null;
-    const avail = [hr && hr.sex, (last.breed || (hr && hr.breed)) && "breed " + (last.breed || hr.breed), last.birth ? "born " + dshow(last.birth) : (hr && hr.birthYear ? `born ${hr.birthYear}${age !== null && !isNaN(age) ? ` (${age} y)` : ""}` : ""),
-      hw ? `Horse File weight ${hw.kg} kg${hw.date ? " (" + dshow(hw.date) + ")" : ""}` : (last.bwt ? `last weight ${last.bwt} kg` : ""), hr && hr.category && "purpose: " + [hr.category, hr.listNotes].filter(Boolean).join(" • "), hr && hr.source && "source: " + hr.source, hr && hr.color && "color " + hr.color, `${pv.length} visit(s)`, last.date ? "last visit " + dshow(last.date) : "", files.length ? `${files.length} saved Horse File(s)` : ""].filter(Boolean);
-    card = `<div class="found-card"><div class="row"><b>✔ Found: <span class="ar">${esc(nm)}</span></b>${(RX.pid || (hr && hr.pid)) ? `<span class="pill p-n">ID ${esc(RX.pid || hr.pid)}</span>` : ""}<span class="spacer"></span>
+    const nm = hr ? [hr.name, hr.nameEn].filter(Boolean).join(" / ") : fr ? [fr.name, fr.nameEn].filter(Boolean).join(" / ") : (last.name || RX.name);
+    const age = (hr || fr) && (hr ? hr.birthYear : (fr.data || {}).birthYear) ? new Date().getFullYear() - (+(hr ? hr.birthYear : fr.data.birthYear)) : null;
+    const hx = hr || (fr ? Object.assign({pid: fr.pid || ""}, fr.data || {}) : null);
+    const avail = [hx && hx.sex, (last.breed || (hx && hx.breed)) && "breed " + (last.breed || hx.breed), last.birth ? "born " + dshow(last.birth) : (hx && hx.birthYear ? `born ${hx.birthYear}${age !== null && !isNaN(age) ? ` (${age} y)` : ""}` : ""),
+      hw ? `Horse File weight ${hw.kg} kg${hw.date ? " (" + dshow(hw.date) + ")" : ""}` : (last.bwt ? `last weight ${last.bwt} kg` : ""), hx && hx.category && "purpose: " + [hx.category, hx.listNotes].filter(Boolean).join(" • "), hx && hx.source && "source: " + hx.source, hx && hx.color && "color " + hx.color, fr && "from saved Horse File", `${pv.length} visit(s)`, last.date ? "last visit " + dshow(last.date) : "", files.length ? `${files.length} saved Horse File(s)` : ""].filter(Boolean);
+    const fim = hr && horseImg(hr._id);
+    card = `<div class="found-card">${fim ? `<img src="${esc(fim.data)}" alt="" style="float:right;width:72px;height:72px;object-fit:cover;border-radius:8px;margin:0 0 6px 10px;border:1px solid var(--line)">` : ""}<div class="row"><b>✔ Found: <span class="ar">${esc(nm)}</span></b>${(RX.pid || (hr && hr.pid)) ? `<span class="pill p-n">ID ${esc(RX.pid || hr.pid)}</span>` : ""}<span class="spacer"></span>
       ${changes.length ? `<button class="pri small" id="btnFillAll">Fill all / تعبئة الكل</button>` : `<span class="pill p-ok">All details filled</span>`}</div>
       <div class="av">Available: ${esc(avail.join(" · "))}</div>
       <div class="row small" style="margin-top:6px"><button class="small" id="btnRec">📋 Full patient record</button><a href="${esc(hfLink(RX.pid || (hr && hr.pid) || "", (hr && hr.name) || RX.name))}">🐴 Open Horse File</a>${files.length ? ` · <a href="${esc(hfLink(RX.pid || (hr && hr.pid) || "", (hr && hr.name) || RX.name))}&recs=1">📂 Saved Horse Files (${files.length})</a>` : ""}</div></div>`;
@@ -856,7 +866,7 @@ async function downloadRx(){
 function buildVisit(){
   const rows = rxRows();
   const rxText = rows.map((r,i)=>`${i+1}. ${r.l.med} – ${fmt(r.c.dose,3)} ${r.c.basis||""}${r.c.vol!==null?`, ${fmt(r.c.vol,1)} ml`:""}, ${r.c.route||""}, ${r.c.freq||""}${r.c.days?` x ${r.c.days} d`:""}${r.l.instr?` (${r.l.instr})`:""}`).join("\n");
-  return {date:RX.date, pid:RX.pid.trim(), name:RX.name.trim(), sex:RX.sex, breed:RX.breed, birth:RX.birth, age:ageText(RX.birth,RX.date),
+  return {date:RX.date, pid:RX.pid.trim(), name:RX.name.trim(), sex:RX.sex, breed:RX.breed, birth:RX.birth, age:ageText(RX.birth,RX.date), category:RX.category||"", source:RX.source||"",
     type:RX.type, bwt:RX.bwt, cond:RX.cond, preg:RX.preg, pregStage: pregText(RX), temp:RX.temp, resp:RX.resp, pr:RX.pr, tempEx:RX.tempEx||"", respEx:RX.respEx||"", prEx:RX.prEx||"", tempPost:RX.tempPost||"", respPost:RX.respPost||"", prPost:RX.prPost||"", vgroup:vgroupOf(RX), complaint:RX.complaint, td:RX.td,
     dtype:RX.dtype, disease:RX.disease, tests:RX.tests.join(", "), invest:RX.invest||"", invList:ensureInv(RX, RX.date).filter(r => (r.test||"").trim() || (r.result||"").trim()), notes:RX.notes||"", rx:rxText, advice:RX.advice, vet:RX.vet||ST().vet, stockAdjusted:!!RX.stockAdjusted,
     rxLines: rows.map(r=>({med:r.l.med, dose:r.c.dose, basis:r.c.basis||"", route:r.c.route||"", freq:r.c.freq||"", days:r.c.days, vol:r.c.vol, course:r.c.course, instr:r.l.instr||""})),
@@ -1247,6 +1257,31 @@ function editMedImage(id){
       catch(e){ msg.textContent = (e && e.message && e.message !== "no db") ? e.message : "Could not save the image."; } }; });
 }
 
+/* ---------------- horse photos (same image store as medicines, key "horse_<id>") ---------------- */
+const horseImg = id => id ? medImg("horse_" + id) : null;
+function editHorseImage(id){
+  const h = (S.horses || []).find(x => x._id === id); if (!h) return;
+  const im = horseImg(id), nm = [h.name, h.nameEn].filter(Boolean).join(" / ");
+  modal(`<h2>Photo – <span class="ar">${esc(nm)}</span></h2>
+    <div style="text-align:center;margin-bottom:10px">${im ? `<img src="${esc(im.data)}" alt="" style="max-width:100%;max-height:360px;border-radius:8px;border:1px solid var(--line)">` : '<p class="muted">No photo yet. Take one now or choose one from the gallery.</p>'}</div>
+    <div class="row"><button type="button" data-mp="himg_cam">📷 Take photo</button><button type="button" data-mp="himg_gal">🖼 Choose from gallery</button>
+    <input type="file" id="himg_cam" accept="image/*" capture="environment" hidden><input type="file" id="himg_gal" accept="image/*" hidden>
+    <span class="spacer"></span>${im ? '<button type="button" data-act="dl">⬇ Download</button><button type="button" class="danger" data-act="del">Remove photo</button>' : ""}<button class="pri" data-act="close">Close</button></div>
+    <p class="small muted" id="himgMsg"></p>`, async (act, close) => {
+    if (act === "close") return close();
+    if (act === "dl") return downloadMedia({kind:"photo", data:im.data, name:h.nameEn || h.name || "horse", date:today(), fname:"photo"});
+    if (act === "del") { await W(() => db.doc("medimg/horse_" + id).delete()); toast("Photo removed."); close(); }
+  });
+  const bg = [...document.querySelectorAll(".modal-bg")].pop();
+  ["cam","gal"].forEach(k => { const inp = bg.querySelector("#himg_" + k);
+    bg.querySelector(`[data-mp="himg_${k}"]`).onclick = () => inp.click();
+    inp.onchange = async () => { const f = inp.files[0]; inp.value = ""; if (!f) return;
+      const msg = bg.querySelector("#himgMsg"); msg.textContent = "Saving…";
+      try { const data = await fileToJpeg(f, 900, 0.8); await W(() => db.doc("medimg/horse_" + id).set({data, horse:h.name || h.nameEn || "", pid:h.pid || "", at:new Date().toISOString()}));
+        toast("Photo saved."); bg.remove(); render(true); }
+      catch(e){ msg.textContent = (e && e.message && e.message !== "no db") ? e.message : "Could not save the photo."; } }; });
+}
+
 /* ---------------- patient record (all visits on one page) ---------------- */
 let PAT = null, PMEDIA = {};
 function openPatient(pid, name){ PAT = {pid:(pid||"").trim(), name:(name||"").trim()}; if (location.hash === "#patient") render(true); else location.hash = "#patient"; }
@@ -1615,7 +1650,8 @@ const sexFromList = s => { const t = String(s || "").toLowerCase(), list = L().s
   if (/colt|فلو(?!ه)/.test(t)) return pick("Male"); if (/mare|filly|فرس|مهره|فلوه/.test(t)) return pick("Female"); return ""; };
 // everything we know about a horse, in prescription fields (only non-empty values)
 function rxFillData(p, pv, hr, hw){
-  const last = pv[0] || {}, f = (hr && hr.file) || {}, out = {};
+  const last = pv[0] || {}, fr = fileRec(p), f = Object.assign({}, (fr && fr.data) || {}, (hr && hr.file) || {}), out = {};
+  if (!hr && fr) hr = {pid: fr.pid || f.patientId || "", name: fr.name || f.name || "", nameEn: fr.nameEn || f.nameEn || "", sex: f.sex, breed: f.breed, birthYear: f.birthYear, category: f.category, source: f.source};
   const put = (k, v) => { if (v !== undefined && v !== null && String(v).trim() !== "") out[k] = String(v); };
   put("pid", p.pid || last.pid || (hr && hr.pid)); put("name", p.name || last.name || (hr && hr.name));
   put("sex", last.sex || sexFromList(hr && (hr.sex || f.sex)));
@@ -1625,6 +1661,7 @@ function rxFillData(p, pv, hr, hw){
   else { const yr = /^\d{4}$/.test(String(by || "")) ? new Date().getFullYear() - (+by) : null;
     if ((/foal|فلو/i.test(String((hr && (hr.sex || f.sex)) || "")) || (yr !== null && yr < 1)) && (L().ptypes || []).includes("Foal")) put("type", "Foal"); }
   put("bwt", hw && (!last.bwt || (hw.date || "") >= (last.date || "")) ? hw.kg : last.bwt);
+  put("category", (hr && hr.category) || f.category || last.category); put("source", (hr && hr.source) || f.source || last.source);
   if (pv.length || hr) out.status = "Old";
   return out;
 }
@@ -1635,7 +1672,11 @@ function startRxFor(pid, name){
     PEND = []; saveDraft(); if (location.hash === "#rx") render(true); else location.hash = "#rx"; toast("Horse details filled – check them before saving."); };
   if (RX.name || RX.complaint || RX.lines.some(l => l.med)) confirmBox("Start a new prescription for this horse? The current form will be replaced.", go); else go();
 }
-const hfWeight = p => { const h = horseRec(p); return h && N(h.weightKg) !== null ? {kg: String(h.weightKg), date: h.weightDate || "", method: h.weightMethod || ""} : null; };
+// newest saved Horse File of this horse (finals first, then drafts) – used when the horse list has no value
+const fileRec = p => { const h = horseRec(p), all = (S.horseFiles || []).filter(r => r && r.data && ((h && r.key === h._id) || ofHorse(p, r) || (r.nameEn && aliasNames(p).includes(hk(r.nameEn)))));
+  const nw = (a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""); return all.filter(r => r.status !== "draft").sort(nw)[0] || all.sort(nw)[0] || null; };
+const hfWeight = p => { const h = horseRec(p); if (h && N(h.weightKg) !== null) return {kg: String(h.weightKg), date: h.weightDate || "", method: h.weightMethod || ""};
+  const r = fileRec(p), d = r && r.data; return d && N(d.weightKg) !== null ? {kg: String(d.weightKg), date: d.weightDate || (r.savedAt || "").slice(0,10), method: d.manualKg ? "manual" : "tape formula"} : null; };
 const hfLink = (pid, name) => `horse-file.html?${new URLSearchParams(Object.assign({}, pid ? {pid} : {}, name ? {name} : {})).toString()}`;
 const vaccMonths = () => N(ST().vaccMonths) ?? 12;
 const dewormMonths = () => N(ST().dewormMonths) ?? 3;
@@ -2328,18 +2369,21 @@ function renderHorses(main){
     <p class="small muted">All horse details in one place – add, edit or delete here. New prescription and the Horse File use this straight away: type a horse's name or ID there and its details pop up to fill (you confirm first), and each field shows the saved value when you click into it.</p>
     <div class="row" style="margin-bottom:8px">${[["all","All"], ...HCATS.map(c => [c[0], c[0].split(" / ")[1] || c[0]])].map(([c,t]) => `<button class="small ${c===horseC?"pri":""}" data-hc="${esc(c)}">${esc(t)} (${c==="all"?all.length:cnt(h => hk(h.category) === hk(c))})</button>`).join("")}</div>
     <input id="hq" placeholder="Search name (Arabic / English), ID, type, notes…" value="${esc(horseQ)}" style="max-width:380px">
-    <div class="tbl" style="margin-top:10px"><table><thead><tr><th>No.</th><th>Patient ID</th><th>Name</th><th>English</th><th>Type / Sex</th><th>Breed</th><th>Born</th><th class="num">Age</th><th class="num">BWT kg</th><th>Source</th><th>Category / purpose</th><th>Service</th>${HCOLS().map(c => `<th>${esc(c.label)}</th>`).join("")}<th class="num">Visits</th><th></th></tr></thead><tbody id="hbody"></tbody></table></div>
+    <div class="tbl" style="margin-top:10px"><table><thead><tr><th>Photo</th><th>No.</th><th>Patient ID</th><th>Name</th><th>English</th><th>Type / Sex</th><th>Breed</th><th>Born</th><th class="num">Age</th><th class="num">BWT kg</th><th>Source</th><th>Category / purpose</th><th>Service</th>${HCOLS().map(c => `<th>${esc(c.label)}</th>`).join("")}<th class="num">Visits</th><th></th></tr></thead><tbody id="hbody"></tbody></table></div>
     <div class="row" style="margin-top:10px;justify-content:center"><button class="pri" id="hAdd2">+ Add horse</button></div></div>`;
   const draw = () => { const q = hk(horseQ);
     const list = all.filter(h => (horseC === "all" || hk(h.category) === hk(horseC)) && (!q || [h.listNo,h.pid,h.name,h.nameEn,h.sex,h.breed,h.category,h.listNotes,h.source,h.rider,h.color,...HCOLS().map(c => h[c.key])].some(x => hk(x).includes(q))));
     HORSES_SHOWN = list;
     $("#hbody").innerHTML = list.map(h => { const a = horseAge(h), nv = S.visits.filter(v => ofHorse({pid:h.pid||"", name:h.name||h.nameEn||""}, v)).length;
-      return `<tr class="${hcClass(h.category)}"><td>${esc(h.listNo||"")}</td><td>${esc(h.pid||"")}</td><td><b class="ar">${esc(h.name||"")}</b></td><td>${esc(h.nameEn||"")}</td><td class="small">${esc(h.sex||"")}</td><td class="small">${esc(h.breed||"")}</td>
+      const im = horseImg(h._id);
+      return `<tr class="${hcClass(h.category)}"><td style="white-space:nowrap">${im ? `<img class="medimg" src="${esc(im.data)}" alt="${esc(h.nameEn||h.name||"")}" data-hz="${esc(h._id)}">` : `<div class="medimg-none" aria-hidden="true">🐴</div>`}<button class="small" data-hph="${esc(h._id)}" style="margin-top:2px">${im ? "Change" : "+ Photo"}</button></td><td>${esc(h.listNo||"")}</td><td>${esc(h.pid||"")}</td><td><b class="ar">${esc(h.name||"")}</b></td><td>${esc(h.nameEn||"")}</td><td class="small">${esc(h.sex||"")}</td><td class="small">${esc(h.breed||"")}</td>
         <td>${esc(h.birth ? dshow(h.birth) : (h.birthYear||""))}</td><td class="num">${a===null?"":a}</td><td class="num">${h.weightKg ? esc(h.weightKg) : ""}</td><td class="small">${esc(h.source||"")}</td>
         <td class="small">${esc([h.category, h.listNotes].filter(Boolean).join(" • "))}</td><td class="small">${esc(horseSvc(h))}</td>${HCOLS().map(c => `<td class="small${c.type==="number"?" num":""}">${esc(hcolShow(c, h[c.key]))}</td>`).join("")}<td class="num">${nv||""}</td>
         <td style="white-space:nowrap"><button class="small" data-he="${esc(h._id)}">Edit</button> <button class="small" data-hr="${esc(h._id)}">Record</button> <button class="small" data-hf="${esc(h._id)}">Horse File</button> <button class="small" data-hn="${esc(h._id)}">+ Rx</button></td></tr>`; }).join("") || `<tr><td colspan="${14 + HCOLS().length}" class="muted">${all.length ? "No horse matches." : "No horses yet – press “Load built-in horse list” or “+ Add horse”."}</td></tr>`;
     const get = id => S.horses.find(x => x._id === id);
     $("#hbody").querySelectorAll("[data-he]").forEach(b => b.onclick = () => editHorse(b.dataset.he));
+    $("#hbody").querySelectorAll("[data-hph]").forEach(b => b.onclick = () => editHorseImage(b.dataset.hph));
+    $("#hbody").querySelectorAll("[data-hz]").forEach(b => b.onclick = () => { const im = horseImg(b.dataset.hz), h = get(b.dataset.hz); if (im) viewMedia({kind:"photo", data:im.data, fname:(h && (h.nameEn || h.name)) || "horse"}); });
     $("#hbody").querySelectorAll("[data-hr]").forEach(b => b.onclick = () => { const h = get(b.dataset.hr); openPatient(h.pid||"", h.name||h.nameEn||""); });
     $("#hbody").querySelectorAll("[data-hf]").forEach(b => b.onclick = () => { const h = get(b.dataset.hf); location.href = hfLink(h.pid||"", h.name||h.nameEn||""); });
     $("#hbody").querySelectorAll("[data-hn]").forEach(b => b.onclick = () => { const h = get(b.dataset.hn); startRxFor(h.pid||"", h.name||h.nameEn||""); });
@@ -2367,8 +2411,9 @@ function editHorse(id, prefill){
     <datalist id="dl_htypes">${HTYPES.map(x => `<option>${esc(x)}</option>`).join("")}</datalist><datalist id="dl_hsrc">${HSRC.map(x => `<option>${esc(x)}</option>`).join("")}</datalist>
     <datalist id="dl_hcat">${HCATS.map(x => `<option>${esc(x[0])}</option>`).join("")}</datalist><datalist id="dl_hbreeds">${(L().breeds || []).map(x => `<option>${esc(x)}</option>`).join("")}</datalist>
     <p class="small muted">Saved here = used by New prescription and the Horse File. Birth year fills itself from the birth date.</p>
-    <div class="row" style="margin-top:12px">${id ? '<button class="danger" data-act="del">Delete horse</button>' : ""}<span class="spacer"></span><button data-act="close">Cancel</button><button class="pri" data-act="save">Save</button></div>`, async (act, close) => {
+    <div class="row" style="margin-top:12px">${id ? '<button class="danger" data-act="del">Delete horse</button><button data-act="photo">📷 Photo</button>' : ""}<span class="spacer"></span><button data-act="close">Cancel</button><button class="pri" data-act="save">Save</button></div>`, async (act, close) => {
     if (act === "close") return close();
+    if (act === "photo") { close(); return editHorseImage(id); }
     if (act === "del") return confirmBox(`Delete ${h.name || h.nameEn || "this horse"} from the horse list permanently? Its prescriptions, vaccinations and saved Horse Files are kept.`, async () => { await W(() => db.doc("horses/" + id).delete()); close(); toast("Horse deleted."); });
     const d = {}; HF.forEach(([k]) => { d[k] = $("#eh_" + k).value.trim(); });
     d.aliases = [...new Set(d.aliases.split(/[,،]/).map(x => x.trim()).filter(Boolean))];
@@ -2727,7 +2772,7 @@ async function bindHfLists(){
 function renderSettings(main){
   const st = ST(), l = L();
   const ta = (k, lab) => `<label>${lab} (one per line)<textarea id="ls_${k}" rows="6">${esc((l[k]||[]).join("\n"))}</textarea></label>`;
-  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v14 · 16 Nov 2026</span></div><div class="grid g4">
+  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v17 · 17 Nov 2026</span></div><div class="grid g4">
     <label>Clinic / unit name<input id="st_clinic" value="${esc(st.clinic)}"></label><label>Veterinarian (printed)<input id="st_vet" value="${esc(st.vet)}"></label>
     <label>Max IM volume per site (ml)<input id="st_imMax" type="number" value="${esc(st.imMax)}"></label><label>Expiry warning (days)<input id="st_expiryDays" type="number" value="${esc(st.expiryDays)}"></label><label>Vaccination / deworming reminder (days before)<input id="st_remindDays" type="number" value="${esc(st.remindDays ?? 14)}"></label>
     <label>Next vaccination after (months)<input id="st_vaccMonths" type="number" min="0" value="${esc(st.vaccMonths ?? 12)}"></label><label>Next deworming after (months)<input id="st_dewormMonths" type="number" min="0" value="${esc(st.dewormMonths ?? 3)}"></label></div>
@@ -2894,5 +2939,49 @@ function loginPanel(msg){
   if ("serviceWorker" in navigator && location.protocol === "https:") { try { navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(() => {}); } catch(e){} }
 })();
 </script>
+<!-- every dropdown: last choice "Other – type…" lets you type your own value -->
+<script>
+(function(){
+  const OTHER = "__type_other__", LAB = "✏ Other – type… / أخرى – اكتب";
+  window.TYPE_OTHER = OTHER;
+  const eligible = sel => {
+    if (sel.multiple || sel.closest("[data-noother]")) return false;
+    const o = [...sel.options].filter(x => x.value !== "" && x.value !== OTHER);
+    return o.length > 0 && o.every(x => x.value === x.text || x.value === x.text.trim()); // plain text choices only (not internal codes)
+  };
+  function prep(){
+    document.querySelectorAll("select").forEach(sel => {
+      if (sel.querySelector('option[value="' + OTHER + '"]') || !eligible(sel)) return;
+      sel.appendChild(new Option(LAB, OTHER));
+    });
+  }
+  let raf = null;
+  new MutationObserver(() => { if (raf) return; raf = requestAnimationFrame(() => { raf = null; prep(); }); })
+    .observe(document.documentElement, {childList: true, subtree: true});
+  prep();
+  const last = new WeakMap();
+  const remember = e => { const t = e.target; if (t && t.tagName === "SELECT" && t.value !== OTHER) last.set(t, t.value); };
+  document.addEventListener("focusin", remember, true);
+  document.addEventListener("pointerdown", remember, true);
+  let swallow = null;
+  function handle(e){
+    const sel = e.target; if (!sel || sel.tagName !== "SELECT") return;
+    if (sel.value !== OTHER) { if (e.isTrusted && swallow === sel) { e.stopImmediatePropagation(); swallow = null; } return; }
+    e.stopImmediatePropagation();
+    const prev = last.has(sel) ? last.get(sel) : "";
+    const v = (window.prompt("Type the value / اكتب القيمة:", "") || "").trim();
+    swallow = sel; setTimeout(() => { if (swallow === sel) swallow = null; }, 0);
+    if (!v) { sel.value = prev; return; }
+    let op = [...sel.options].find(o => o.value === v);
+    if (!op) { op = new Option(v, v); sel.insertBefore(op, sel.querySelector('option[value="' + OTHER + '"]')); }
+    sel.value = v; last.set(sel, v);
+    sel.dispatchEvent(new Event("input", {bubbles: true}));
+    sel.dispatchEvent(new Event("change", {bubbles: true}));
+  }
+  document.addEventListener("input", handle, true);
+  document.addEventListener("change", handle, true);
+})();
+</script>
+
 </body>
 </html>

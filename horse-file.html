@@ -121,7 +121,7 @@
   <h4>Settings / الإعدادات</h4>
   <button class="b-set" id="btnLists">✏ Dropdown lists / القوائم</button>
   <button class="b-set" id="barHdr">✏ Heading &amp; date / العنوان</button>
-  <span class="ver">Horse File v14 · 16 Nov 2026</span>
+  <span class="ver">Horse File v17 · 17 Nov 2026</span>
 </aside>
 
 <div class="modal noprint" id="repModal"><div class="box">
@@ -180,11 +180,11 @@
 
   <section class="r"><h2>A. Identity / الهوية</h2>
     <div class="grid">
-      <div class="f"><label>Patient ID / <span class="ar">رقم المريض</span></label><input data-k="patientId"></div>
-      <div class="f"><label>Horse Name / <span class="ar">اسم الحصان</span></label><input data-k="name"></div>
+      <div class="f"><label>Patient ID / <span class="ar">رقم المريض</span></label><input data-k="patientId" list="hfIdList" autocomplete="off"><datalist id="hfIdList"></datalist></div>
+      <div class="f"><label>Horse Name / <span class="ar">اسم الحصان</span></label><input data-k="name" list="horseList" autocomplete="off"></div>
       <div class="f"><label>Microchip No. / <span class="ar">رقم الشريحة</span></label><input data-k="microchip"></div>
       <div class="f"><label>Military No. / <span class="ar">الرقم العسكري</span></label><input data-k="militaryNo"></div>
-      <div class="f"><label>Name (English) / <span class="ar">الاسم بالإنجليزية</span></label><input data-k="nameEn"></div>
+      <div class="f"><label>Name (English) / <span class="ar">الاسم بالإنجليزية</span></label><input data-k="nameEn" list="hfEnList" autocomplete="off"><datalist id="hfEnList"></datalist></div>
       <div class="f"><label>Birth Year / <span class="ar">مواليد الخيل</span></label><input type="number" data-k="birthYear" id="bYear"></div>
       <div class="f"><label>Age / <span class="ar">العمر</span></label><input data-k="age" id="age"></div>
       <div class="f"><label>Sex / <span class="ar">الجنس</span></label><input data-k="sex" list="sexList"><datalist id="sexList"><option>فرس / Mare</option><option>حصان / Gelding</option><option>فحل / Stallion</option><option>مهره / Filly</option><option>فلو / Colt foal</option><option>فلوه / Filly foal</option><option>بوني فحل / Pony stallion</option><option>بوني فرس / Pony mare</option></datalist></div>
@@ -196,6 +196,7 @@
       <div class="f span2"><label>List Notes / <span class="ar">الملاحظات (الكشف)</span></label><input data-k="listNotes"></div>
       <div class="f span4"><label>Purpose / <span class="ar">مهن الاستخدام</span></label><input data-k="purpose"></div>
     </div>
+    <div id="idOffer" class="noprint" style="margin:6px 10px 0"></div>
   </section>
 
   <section class="g"><h2>B. Measurements & Body Weight / القياسات ووزن الجسم</h2>
@@ -371,14 +372,16 @@ function getForm(){
   d.estimatedKg=$("#estKg").value; d.updated=new Date().toISOString(); return d;
 }
 function setForm(d={}){
-  document.querySelectorAll("[data-k]").forEach(el=>{ if(d[el.dataset.k]!=null && !el.readOnly) el.value=d[el.dataset.k]; });
+  document.querySelectorAll("[data-k]").forEach(el=>{ const v=d[el.dataset.k]; if(v==null || el.readOnly) return;
+    if(el.tagName==="SELECT" && v!=="" && ![...el.options].some(o=>o.value===String(v))) el.insertBefore(new Option(v,v), el.querySelector('option[value="__type_other__"]')); // typed "other" value
+    el.value=v; });
   if(d.vacc) document.querySelectorAll("[data-v]").forEach(el=>el.value=d.vacc[el.dataset.v]||"");
   if(d.treatment) resetTreat(d.treatment);
   calcWeight(); calcShoe(); calcVitals();
 }
 $("#btnClear").onclick=()=>{ if(!confirm("Clear the form? / مسح النموذج؟"))return;
   document.querySelectorAll("[data-k],[data-v]").forEach(el=>{ if(!["div","kf"].includes(el.id)) el.value=""; });
-  $("#div").value=300; $("#kf").value=2.2; $("#fileDate").value=today(); window._siteRec=null; CUR=null; LOADED=null; LAST_F=null; LAST_H=null; $("#openRes").innerHTML=""; $("#saveInfo").textContent=""; resetTreat(); calcWeight(); calcShoe(); calcVitals(); };
+  $("#div").value=300; $("#kf").value=2.2; $("#fileDate").value=today(); window._siteRec=null; CUR=null; LOADED=null; LAST_F=null; LAST_H=null; $("#openRes").innerHTML=""; $("#idOffer").innerHTML=""; OFFER_FOR=""; $("#saveInfo").textContent=""; resetTreat(); calcWeight(); calcShoe(); calcVitals(); };
 
 /* ---------- DATA: your site's Firebase (same login), or this browser only ---------- */
 let db=null, ONLINE=false;
@@ -437,9 +440,14 @@ async function horseIndex(visits){
 }
 function findHorse(list,q){ q=hk(q); if(!q) return null;
   return list.find(h=>hk(h.pid)===q) || list.find(h=>[h.name,h.nameEn,`${h.name} / ${h.nameEn}`].some(x=>hk(x)===q)) || null; }
+let IDX=null, IDX_T=0;
 async function refreshPicker(){
   try{ const visits=ONLINE? await store.all(SETTINGS.visits):[]; const L=await horseIndex(visits);
     $("#horseList").innerHTML=L.map(h=>`<option value="${esc(h.name||h.pid)}">${esc([h.pid,h.nameEn].filter(Boolean).join(" – "))}</option>`+(h.nameEn&&h.nameEn!==h.name?`<option value="${esc(h.nameEn)}">${esc([h.pid,h.name].filter(Boolean).join(" – "))}</option>`:"")).join("");
+    const u=a=>[...new Set(a.filter(Boolean).map(String))];
+    $("#hfIdList").innerHTML=u(L.map(h=>h.pid)).map(id=>{ const h=L.find(x=>String(x.pid)===id); return `<option value="${esc(id)}">${esc([h.name,h.nameEn].filter(Boolean).join(" – "))}</option>`; }).join("");
+    $("#hfEnList").innerHTML=u(L.map(h=>h.nameEn)).map(n=>{ const h=L.find(x=>x.nameEn===n); return `<option value="${esc(n)}">${esc([h.pid,h.name].filter(Boolean).join(" – "))}</option>`; }).join("");
+    IDX=null;
     if(L.length) status(`${ONLINE?"Signed in":"Browser mode"} – ${L.length} horses / خيل`);
   }catch(e){ console.error(e); }
 }
@@ -448,20 +456,25 @@ await refreshPicker();
 /* ---------- build one horse's file from everything on the site ---------- */
 const VMATCH=[/influ|flu/i,/tetan|\btet\b/i,/west|nile|wnv/i];
 const yearOf=d=>{ const m=String(d||"").match(/^(\d{4})/); return m?m[1]:""; };
-function assemble(h, visits, prev){
+function assemble(h, visits, prev, recs=[]){
   const f={...(h.file||{})};
+  const lastRec=(recs||[]).filter(r=>r&&r.data).sort(byNewest)[0]; const rd=lastRec?lastRec.data:{};
   const put=(k,v)=>{ if((f[k]===undefined||f[k]==="")&&v!==undefined&&v!==null&&v!=="") f[k]=v; };
   const vs=visits.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.createdAt||"").localeCompare(a.createdAt||""));
   const last=vs[0]||{};
   put("patientId",h.pid); put("name",h.name||last.name); put("nameEn",h.nameEn);
-  put("birthYear",h.birthYear||yearOf(last.birth)); put("sex",h.sex||last.sex); put("breed",h.breed||last.breed);
+  put("birthYear",h.birthYear||yearOf(h.birth)||yearOf(last.birth)); put("sex",h.sex||last.sex); put("breed",h.breed||last.breed);
   for(const k of ["color","microchip","militaryNo","rider","source","category","listNotes"]) put(k,h[k]);
   if(f.birthYear) put("age",new Date().getFullYear()-Number(f.birthYear)); else if(last.age) put("age",last.age);
   put("purpose",[h.category,h.listNotes].filter(Boolean).join(" • "));
+  // anything still empty: take it from the newest saved Horse File of this horse
+  for(const k of ["patientId","name","nameEn","birthYear","sex","breed","color","microchip","militaryNo","rider","source","category","listNotes","purpose","heightHands","bcs"]) put(k,rd[k]);
+  if(f.age===undefined||f.age==="") put("age",rd.age);
   // weight: newest of horse file and prescriptions
   const hfW=h.weightKg?{kg:h.weightKg,date:h.weightDate||"",src:"horse file"}:null;
   const vW=vs.find(v=>v.bwt); const rxW=vW?{kg:vW.bwt,date:vW.date||"",src:"prescription"}:null;
-  const best=[hfW,rxW].filter(Boolean).sort((a,b)=>(b.date||"").localeCompare(a.date||""))[0]||null;
+  const rcW=rd.weightKg?{kg:rd.weightKg,date:rd.weightDate||(lastRec.savedAt||"").slice(0,10),src:"saved horse file"}:null;
+  const best=[hfW,rxW,rcW].filter(Boolean).sort((a,b)=>(b.date||"").localeCompare(a.date||""))[0]||null;
   f._weight=best;
   if(best && !f.manualKg && !(f.lengthIn&&f.girthIn)){ f.manualKg=best.kg; put("weightDate",best.date); }
   // vitals from the latest prescription (only if the file has none)
@@ -571,8 +584,9 @@ const when=s=>String(s||"").slice(0,16).replace("T"," ");
 const permHint=e=>/permission|insufficient/i.test(String(e&&(e.code||e.message)))
   ? "\n\nYour Firebase rules do not allow the new \"horseFiles\" collection yet – add it in Firebase › Firestore › Rules (same rule as \"horses\").\nقواعد Firebase لا تسمح بحفظ السجلات بعد" : "";
 
-function formHasData(){
-  return [...document.querySelectorAll("[data-k],[data-v]")].some(el=>el.value && !el.readOnly && !["div","kf","fileDate"].includes(el.id))
+function formHasData(h){ // h given → the ID / name you just typed for that horse does not count
+  const own=el=>h && ["patientId","name","nameEn"].includes(el.dataset.k) && [h.pid,h.name,h.nameEn,...(Array.isArray(h.aliases)?h.aliases:[])].some(x=>hk(x)&&hk(x)===hk(el.value));
+  return [...document.querySelectorAll("[data-k],[data-v]")].some(el=>el.value && !el.readOnly && !["div","kf","fileDate"].includes(el.id) && !own(el))
       || [...$("#treat tbody").querySelectorAll("input")].some(i=>i.value);
 }
 function clearForm(){
@@ -582,7 +596,9 @@ function clearForm(){
 function applyData(f,mode){
   if(mode==="all"){ clearForm(); setForm(f); }
   else {
-    document.querySelectorAll("[data-k]").forEach(el=>{ const v=f[el.dataset.k]; if(!el.readOnly && !el.value && v!=null && v!=="") el.value=v; });
+    document.querySelectorAll("[data-k]").forEach(el=>{ const v=f[el.dataset.k]; if(!el.readOnly && !el.value && v!=null && v!==""){
+      if(el.tagName==="SELECT" && ![...el.options].some(o=>o.value===String(v))) el.insertBefore(new Option(v,v), el.querySelector('option[value="__type_other__"]'));
+      el.value=v; } });
     if(f.vacc) document.querySelectorAll("[data-v]").forEach(el=>{ if(!el.value && f.vacc[el.dataset.v]) el.value=f.vacc[el.dataset.v]; });
     const hasT=[...$("#treat tbody").querySelectorAll("input")].some(i=>i.value);
     if(!hasT && f.treatment && f.treatment.length) resetTreat(f.treatment);
@@ -602,7 +618,7 @@ function matchHorses(list,q){
 async function gather(h){
   const [vs,pv]=ONLINE? await Promise.all([store.forHorse(SETTINGS.visits,h),store.forHorse(SETTINGS.preventive,h)]) : [[],[]];
   let recs=[]; try{ recs=(await recStore.list()).filter(r=>recOfHorse(r,h)); }catch(e){ console.warn(e); }
-  return {h,vs,pv,recs,f:assemble(h,vs,pv)};
+  return {h,vs,pv,recs,f:assemble(h,vs,pv,recs)};
 }
 async function findAndOffer(q){
   q=String(q||"").trim(); const box=$("#openRes");
@@ -629,9 +645,9 @@ async function findAndOffer(q){
   }catch(e){ console.error(e); box.innerHTML=`<div class="found none">Error / خطأ: ${escT(e.message)}</div>`; }
 }
 let OFFER_FOR="", LAST_F=null, LAST_H=null;
-async function offer(h){
+async function offer(h, box=$("#openRes")){
   OFFER_FOR=h.key||hk(h.name)||hk(h.pid);
-  const box=$("#openRes"); box.innerHTML=`<div class="found">Collecting available data… / جاري جمع البيانات</div>`;
+  if(box.id!=="openRes") $("#openRes").innerHTML=""; else { const io=$("#idOffer"); if(io) io.innerHTML=""; } box.innerHTML=`<div class="found">Collecting available data… / جاري جمع البيانات</div>`;
   const {f,vs,pv,recs}=await gather(h); LAST_F=f; LAST_H=h;
   const finals=recs.filter(r=>r.status!=="draft").sort(byNewest), draft=recs.filter(r=>r.status==="draft").sort(byNewest)[0];
   const w=f._weight;
@@ -658,13 +674,15 @@ async function offer(h){
       ${draft?`<button class="b-draft" data-a="draft">Open draft / فتح المسودة</button>`:""}
       ${recs.length?`<button data-a="recs">All records (${recs.length}) / كل السجلات</button>`:""}
       <button data-a="cancel">Cancel / إلغاء</button></div></div>`;
+  if(ONLINE && h.key){ db.collection("medimg").doc("horse_"+h.key).get().then(d=>{ const im=d.exists&&d.data().data; const fd=box.querySelector(".found");
+    if(im && fd && !fd.querySelector(".hphoto")) fd.insertAdjacentHTML("afterbegin",`<img class="hphoto" src="${escT(im)}" alt="" style="float:right;width:84px;height:84px;object-fit:cover;border-radius:8px;margin:0 0 6px 10px;border:1px solid #cbd5e1">`); }).catch(()=>{}); }
   box.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{
     const a=b.dataset.a;
     if(a==="cancel") return box.innerHTML="";
     if(a==="last") return openRecord(finals[0]);
     if(a==="draft") return openRecord(draft);
     if(a==="recs") return showRecords(h.name||h.nameEn||h.pid);
-    if(a==="all" && formHasData() && !confirm("Replace everything on the form with the site data? / استبدال كل ما في النموذج ببيانات الموقع؟")) return;
+    if(a==="all" && formHasData(h) && !confirm("Replace everything on the form with the site data? / استبدال كل ما في النموذج ببيانات الموقع؟")) return;
     applyData(f,a); CUR=h; LOADED=null;
     box.innerHTML=`<div class="found ok">✔ ${a==="all"?"Filled / تمت التعبئة":"Empty fields filled / تمت تعبئة الحقول الفارغة"}: ${escT(h.name||"")} ${escT(h.nameEn||"")} – ${vs.length} prescription(s), ${pv.length} vaccination/deworming record(s). Check, then Save. / راجع ثم احفظ</div>`;
     status(`Collected: ${h.name||h.pid} / تم الجمع`);
@@ -1092,20 +1110,40 @@ $("#edDel").onclick=async()=>{
   }catch(e){ alert("Delete failed / فشل الحذف: "+e.message); }
 };
 
-/* ---------- type a name / ID anywhere → available info pops up and asks to fill ---------- */
-async function autoOffer(v){
-  v=String(v||"").trim(); if(!v) return;
+/* ---------- type a name / ID in Identity → saved info from "Horses" and every record on the site pops up right there ---------- */
+async function idIndex(){ // Horses list + names used in prescriptions + names in saved Horse Files (cached 1 min)
+  if(IDX && Date.now()-IDX_T<60000) return IDX;
   const visitsAll=ONLINE? await store.all(SETTINGS.visits).catch(()=>[]) : [];
-  const M=(await horseIndex(visitsAll)).filter(h=>[h.pid,h.name,h.nameEn].some(x=>hk(x)===hk(v)));
-  if(M.length!==1) return;
-  const h=M[0]; if(CUR && ((h.key&&CUR.key===h.key) || (hk(CUR.name)&&hk(CUR.name)===hk(h.name)))) return;
-  if(OFFER_FOR===(h.key||hk(h.name)||hk(h.pid)) && $("#openRes [data-a]")) return; // already showing
-  if(LIST_ON) hideList();
-  $("#openQ").value=v; await offer(h); $("#openBar").scrollIntoView({behavior:"smooth",block:"start"});
+  const L=await horseIndex(visitsAll);
+  try{ (await recStore.list()).forEach(r=>{ if(!r||(!r.name&&!r.pid&&!r.nameEn)) return;
+    if(!L.some(h=>recOfHorse(r,h))) L.push({key:r.key||null,pid:r.pid||"",name:r.name||"",nameEn:r.nameEn||"",fromRecs:true}); }); }catch(e){ console.warn(e); }
+  IDX=L; IDX_T=Date.now(); return L;
 }
-$("#openQ").addEventListener("change",()=>findAndOffer($("#openQ").value));
-$("#pick").addEventListener("change",()=>{ $("#openQ").value=$("#pick").value; findAndOffer($("#pick").value); window.scrollTo({top:0}); });
-['[data-k="name"]','[data-k="nameEn"]','[data-k="patientId"]'].forEach(sel=>{ const el=$(sel); if(el) el.addEventListener("change",()=>autoOffer(el.value)); });
+const exactHit=(h,v)=>[h.pid,h.name,h.nameEn,...(Array.isArray(h.aliases)?h.aliases:[])].some(x=>hk(x)&&hk(x)===hk(v));
+async function autoOffer(v, partial=false){
+  v=String(v||"").trim(); const box=$("#idOffer"); if(!box) return;
+  if(!v){ return; }
+  const L=await idIndex();
+  let M=L.filter(h=>exactHit(h,v));
+  if(!M.length && partial) M=matchHorses(L,v).slice(0,8);
+  if(!M.length){ if(partial && !CUR) box.innerHTML=`<div class="found none">No saved data on the site for “${escT(v)}” – this is a new horse. / لا توجد بيانات محفوظة – حصان جديد</div>`; return; }
+  if(M.length>1){
+    box.innerHTML=`<div class="found"><div class="bi"><b>${M.length} horses match – pick one</b><b class="ar">عدة خيول مطابقة – اختر واحداً</b></div>
+      <div class="row">${M.map((h,i)=>`<button data-i="${i}">${escT([h.pid&&("ID "+h.pid),h.name,h.nameEn].filter(Boolean).join(" · "))}</button>`).join("")}<button data-x="1">Close / إغلاق</button></div></div>`;
+    box.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>offer(M[+b.dataset.i],box));
+    box.querySelector("[data-x]").onclick=()=>box.innerHTML=""; return;
+  }
+  const h=M[0];
+  if(CUR && ((h.key&&CUR.key===h.key) || (hk(CUR.name)&&hk(CUR.name)===hk(h.name)) || (hk(CUR.pid)&&hk(CUR.pid)===hk(h.pid)))) return; // already filled for this horse
+  if(OFFER_FOR===(h.key||hk(h.name)||hk(h.pid)) && box.querySelector("[data-a]")) return; // already showing
+  if(LIST_ON) hideList();
+  await offer(h,box);
+}
+let AO_T=null;
+['[data-k="name"]','[data-k="nameEn"]','[data-k="patientId"]'].forEach(sel=>{ const el=$(sel); if(!el) return;
+  el.addEventListener("input",()=>{ clearTimeout(AO_T); AO_T=setTimeout(()=>autoOffer(el.value,false),450); }); // exact match while typing
+  el.addEventListener("change",()=>{ clearTimeout(AO_T); autoOffer(el.value,true); });                         // after leaving the field: close matches too
+});
 
 /* ---------- hover over or click a field → the value saved anywhere on the site pops up with “Use” ---------- */
 let HINT_EL=null, HINT_T=null;
@@ -1168,7 +1206,7 @@ const LIST_DEFS=[...document.querySelectorAll("select[data-k]")].map(el=>({key:"
     ar:el.closest(".f")?.querySelector("label .ar")?.textContent.trim()||""}))
   .concat([["sexList","Sex / Type","الجنس / النوع"],["breedList","Breed","السلالة"],["srcList","Source","المصدر"],["catList","Category / purpose","الفئة"]]
     .map(([id,l,ar])=>({key:"dl:"+id,el:document.getElementById(id),label:l,ar})).filter(x=>x.el));
-const optsOf=el=>[...el.querySelectorAll("option")].map(o=>o.value||o.textContent).filter(v=>v!=="");
+const optsOf=el=>[...el.querySelectorAll("option")].map(o=>o.value||o.textContent).filter(v=>v!==""&&v!=="__type_other__");
 const LIST_DEFAULT=Object.fromEntries(LIST_DEFS.map(x=>[x.key,optsOf(x.el)]));
 let LISTS={};
 function applyLists(){
@@ -1230,5 +1268,158 @@ await checkSeed();
   else if(pid||nm){ $("#openQ").value=nm||pid; await findAndOffer(nm||pid); if(u.get("recs")) showRecords(nm||pid); }
   else if(u.get("recs")) showRecords(""); }
 </script>
+<!-- v15: print / Save as PDF on one A4 page – blank fields hidden, weight shown in kg without the formula -->
+<style>
+  body.pfit{background:#fff!important;padding:0!important}
+  body.pfit .toolbar,body.pfit .noprint,body.pfit #fhint,body.pfit .modal{display:none!important}
+  body.pfit #form{max-width:none;margin:0;padding:0;box-shadow:none;font-size:10.5px}
+  body.pfit .pe-hide{display:none!important}
+  body.pfit .formula,body.pfit .calc>.hint{display:none!important}
+  body.pfit .calc{border:0;background:none;padding:0;margin:0 10px}
+  body.pfit .calc .grid{padding:0}
+  body.pfit section{margin:5px 0;padding-bottom:5px}
+  body.pfit section h2{padding:3px 8px;margin-bottom:5px;font-size:12px}
+  body.pfit .grid{gap:3px 8px}
+  body.pfit .f label{font-size:10px;margin-bottom:1px}
+  body.pfit h1{font-size:17px;margin:4px 0 0}
+  body.pfit .sub{margin:2px 0 6px}
+  body.pfit .pv{border:1px solid #9a9a9a;border-radius:3px;padding:2px 5px;min-height:17px;white-space:pre-wrap;word-break:break-word;background:#fff}
+  body.pfit .pv.out{background:#e2efda!important;font-weight:bold;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body.pfit .pv.flag{background:#f8cbad!important;color:#9c0006;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body.pfit td .pv{border:0;border-radius:0;min-height:0;padding:2px 4px}
+  body.pfit .pe-ctl{display:none!important}
+  @media print{ body.pfit #form{break-inside:avoid} body.pfit section{break-inside:avoid} }
+</style>
+<script>
+(function(){
+  const MM = 96/25.4;                 // CSS px per mm
+  const PAGE_W = 194*MM, PAGE_H = 281*MM; // A4 minus the 8 mm margins
+  let ON = false;
+  const blank = el => String(el.value ?? "").trim() === "";
+  const dmy = v => /^\d{4}-\d{2}-\d{2}$/.test(v) ? v.slice(8,10)+"/"+v.slice(5,7)+"/"+v.slice(0,4) : v;
+  const shown = el => el.tagName === "SELECT" ? (el.options[el.selectedIndex]?.text || "") : (el.type === "date" ? dmy(el.value) : el.value);
+  function hide(el){ if(el) el.classList.add("pe-hide"); }
+
+  function prep(){
+    const form = document.getElementById("form");
+    if(ON || !form || form.hidden) return;   // horse list and other views print as before
+    ON = true;
+    document.body.classList.add("pfit");
+
+    // 1) weight: kg only – no lbs box and no formula line
+    hide(document.getElementById("estLb")?.closest(".f"));
+
+    // 2) blank fields are left out
+    form.querySelectorAll(".f").forEach(f => {
+      const ctl = f.querySelector("input,select,textarea");
+      if(!ctl){ if(!f.textContent.trim()) hide(f); return; }       // e.g. empty weight-source line
+      if(/signature/i.test(f.querySelector("label")?.textContent || "")) return; // keep the space to sign
+      if(blank(ctl)) hide(f);
+    });
+
+    // 3) empty rows of Vaccinations / Treatment plan are left out
+    form.querySelectorAll("#vacc tbody tr, #treat tbody tr").forEach(tr => {
+      if([...tr.querySelectorAll("input,select")].every(blank)) hide(tr);
+    });
+
+    // 4) a section with nothing filled is left out completely
+    form.querySelectorAll("section").forEach(s => {
+      const items = [...s.querySelectorAll(".f, tbody tr")];
+      if(items.length && items.every(x => x.classList.contains("pe-hide") || x.closest(".pe-hide"))) hide(s);
+    });
+
+    // 5) show typed values as text so long entries wrap instead of being cut off
+    form.querySelectorAll("input,select,textarea").forEach(el => {
+      if(el.closest(".pe-hide") || el.closest(".formula") || el.type === "hidden") return;
+      if(/signature/i.test(el.closest(".f")?.querySelector("label")?.textContent || "")) return;
+      const d = document.createElement("div");
+      d.className = "pv" + (el.classList.contains("out") ? " out" : "") + (el.classList.contains("flag") ? " flag" : "");
+      d.textContent = shown(el);
+      el.classList.add("pe-ctl");
+      el.insertAdjacentElement("afterend", d);
+    });
+
+    // 6) shrink to fit one A4 page
+    let z = 1;
+    for(let i = 0; i < 5; i++){
+      form.style.zoom = ""; form.style.width = (PAGE_W / z) + "px";
+      const nz = Math.min(1, (PAGE_H * 0.97) / form.scrollHeight);
+      if(Math.abs(nz - z) < 0.003){ z = nz; break; }
+      z = nz;
+    }
+    form.style.width = (PAGE_W / z) + "px";
+    form.style.zoom = z;
+    // final check on the real (zoomed) height; shrink a little more if needed
+    for(let i = 0; i < 8; i++){
+      const h = form.getBoundingClientRect().height;
+      if(h <= PAGE_H * 0.96) break;
+      z = z * (PAGE_H * 0.95) / h;
+      form.style.zoom = ""; form.style.width = (PAGE_W / z) + "px"; form.style.zoom = z;
+    }
+  }
+
+  function undo(){
+    if(!ON) return; ON = false;
+    const form = document.getElementById("form");
+    document.body.classList.remove("pfit");
+    form.querySelectorAll(".pv").forEach(d => d.remove());
+    form.querySelectorAll(".pe-ctl").forEach(el => el.classList.remove("pe-ctl"));
+    form.querySelectorAll(".pe-hide").forEach(el => el.classList.remove("pe-hide"));
+    form.style.zoom = ""; form.style.width = "";
+  }
+
+  const nativePrint = window.print.bind(window);
+  window.print = function(){ prep(); nativePrint(); };   // all Print buttons
+  window.addEventListener("beforeprint", prep);          // Ctrl+P / browser menu
+  window.addEventListener("afterprint", undo);
+  const mq = window.matchMedia && window.matchMedia("print");
+  if(mq && mq.addEventListener) mq.addEventListener("change", e => { if(!e.matches) setTimeout(undo, 300); });
+})();
+</script>
+
+<!-- every dropdown: last choice "Other – type…" lets you type your own value -->
+<script>
+(function(){
+  const OTHER = "__type_other__", LAB = "✏ Other – type… / أخرى – اكتب";
+  window.TYPE_OTHER = OTHER;
+  const eligible = sel => {
+    if (sel.multiple || sel.closest("[data-noother]")) return false;
+    const o = [...sel.options].filter(x => x.value !== "" && x.value !== OTHER);
+    return o.length > 0 && o.every(x => x.value === x.text || x.value === x.text.trim()); // plain text choices only (not internal codes)
+  };
+  function prep(){
+    document.querySelectorAll("select").forEach(sel => {
+      if (sel.querySelector('option[value="' + OTHER + '"]') || !eligible(sel)) return;
+      sel.appendChild(new Option(LAB, OTHER));
+    });
+  }
+  let raf = null;
+  new MutationObserver(() => { if (raf) return; raf = requestAnimationFrame(() => { raf = null; prep(); }); })
+    .observe(document.documentElement, {childList: true, subtree: true});
+  prep();
+  const last = new WeakMap();
+  const remember = e => { const t = e.target; if (t && t.tagName === "SELECT" && t.value !== OTHER) last.set(t, t.value); };
+  document.addEventListener("focusin", remember, true);
+  document.addEventListener("pointerdown", remember, true);
+  let swallow = null;
+  function handle(e){
+    const sel = e.target; if (!sel || sel.tagName !== "SELECT") return;
+    if (sel.value !== OTHER) { if (e.isTrusted && swallow === sel) { e.stopImmediatePropagation(); swallow = null; } return; }
+    e.stopImmediatePropagation();
+    const prev = last.has(sel) ? last.get(sel) : "";
+    const v = (window.prompt("Type the value / اكتب القيمة:", "") || "").trim();
+    swallow = sel; setTimeout(() => { if (swallow === sel) swallow = null; }, 0);
+    if (!v) { sel.value = prev; return; }
+    let op = [...sel.options].find(o => o.value === v);
+    if (!op) { op = new Option(v, v); sel.insertBefore(op, sel.querySelector('option[value="' + OTHER + '"]')); }
+    sel.value = v; last.set(sel, v);
+    sel.dispatchEvent(new Event("input", {bubbles: true}));
+    sel.dispatchEvent(new Event("change", {bubbles: true}));
+  }
+  document.addEventListener("input", handle, true);
+  document.addEventListener("change", handle, true);
+})();
+</script>
+
 </body>
 </html>
