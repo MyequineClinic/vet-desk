@@ -541,6 +541,7 @@ function renderRx(main){
     <div id="rxMedia" class="photos"></div>
   </div>
   <div class="panel"><h2>Prescription</h2>
+    <div class="row" style="margin-bottom:10px;align-items:flex-end"><label for="f_vet" style="flex:1 1 320px;max-width:420px">Veterinarian Doctor (printed below the prescription)<input id="f_vet" value="${esc(P.vet || ST().vet || "")}" placeholder="Doctor's name"></label></div>
     <div class="grid g4">
       <div><button id="btnDraft" style="width:100%">Save as draft</button><p class="small muted">Keeps this unfinished case online – reopen it later from any device.${P.draftId?` <span class="pill p-n">Draft saved</span>`:""}</p></div>
       <div><button class="pri" id="btnSave" style="width:100%"${P.saved?" disabled":""}>${P.saved?"Saved to history ✓":"Save to history"}</button><p class="small muted">Adds the finished visit to History (stock is not changed).</p></div>
@@ -554,7 +555,7 @@ function renderRx(main){
   drawLines(); drawInv(); refreshRxCalc(); fillDisease(); drawPrev(); drawVitals(); drawPreg(); drawRxMedia();
 }
 function bindRx(){
-  const map = {f_hcat:"category",f_hsrc:"source",f_status:"status",f_date:"date",f_pid:"pid",f_name:"name",f_sex:"sex",f_breed:"breed",f_birth:"birth",f_type:"type",f_bwt:"bwt",f_cond:"cond",f_preg:"preg",f_pregN:"pregN",f_pregU:"pregU",f_temp:"temp",f_resp:"resp",f_pr:"pr",f_tempEx:"tempEx",f_respEx:"respEx",f_prEx:"prEx",f_tempPost:"tempPost",f_respPost:"respPost",f_prPost:"prPost",f_complaint:"complaint",f_td:"td",f_advice:"advice",f_notes:"notes"};
+  const map = {f_vet:"vet",f_hcat:"category",f_hsrc:"source",f_status:"status",f_date:"date",f_pid:"pid",f_name:"name",f_sex:"sex",f_breed:"breed",f_birth:"birth",f_type:"type",f_bwt:"bwt",f_cond:"cond",f_preg:"preg",f_pregN:"pregN",f_pregU:"pregU",f_temp:"temp",f_resp:"resp",f_pr:"pr",f_tempEx:"tempEx",f_respEx:"respEx",f_prEx:"prEx",f_tempPost:"tempPost",f_respPost:"respPost",f_prPost:"prPost",f_complaint:"complaint",f_td:"td",f_advice:"advice",f_notes:"notes"};
   Object.entries(map).forEach(([id,k]) => { const el = document.getElementById(id); el.addEventListener("input", () => {
     RX[k] = el.value; saveDraft();
     if (k==="birth"||k==="date") $("#f_age").value = ageText(RX.birth, RX.date);
@@ -842,7 +843,7 @@ function sheetHTML(){
   ${"<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>".repeat(pad)}</table>
   <table style="margin-top:10px"><tr><td class="lab">Advice</td><td>${esc(P.advice).replace(/\n/g,"<br>")}</td></tr></table>
   <p style="font-size:10pt;color:#555;text-align:center">Doses are calculated from body weight and generic dose rates; verify against the product label before administration.</p>
-  <p style="text-align:right;margin-top:30px">Signature: ______________________<br><b>${esc(P.vet||st.vet)}</b></p></div>`;
+  <p style="text-align:right;margin-top:30px">Signature: ______________________<br>Veterinarian Doctor: <b>${esc(P.vet||st.vet||"")}</b></p></div>`;
 }
 function rxDocHTML(){
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Prescription ${esc(RX.name)}</title><style>
@@ -1909,7 +1910,7 @@ function singleInner(v, media){
     <tr><td class="lab">Age</td><td>${esc(v.age || ageText(v.birth, v.date))}</td><td class="lab">Type</td><td>${esc(v.type)}</td></tr>
     <tr><td class="lab">Visit date</td><td>${esc(dshow(v.date))}</td><td class="lab">Body weight</td><td>${v.bwt ? esc(v.bwt) + " kg" : ""}</td></tr></table>`
     + visitBlock(v, media)
-    + `<p style="text-align:right;margin-top:30px">Signature: ______________________<br><b>${esc(v.vet || st.vet || "")}</b></p><p class="foot">Printed ${esc(dshow(today()))}</p>`;
+    + `<p style="text-align:right;margin-top:30px">Signature: ______________________<br>Veterinarian Doctor: <b>${esc(v.vet || st.vet || "")}</b></p><p class="foot">Printed ${esc(dshow(today()))}</p>`;
 }
 async function visitDoc(id, mode){
   const v = S.visits.find(x => x._id === id); if (!v) return;
@@ -2772,7 +2773,7 @@ async function bindHfLists(){
 function renderSettings(main){
   const st = ST(), l = L();
   const ta = (k, lab) => `<label>${lab} (one per line)<textarea id="ls_${k}" rows="6">${esc((l[k]||[]).join("\n"))}</textarea></label>`;
-  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v17 · 17 Nov 2026</span></div><div class="grid g4">
+  main.innerHTML = `<div class="panel"><div class="row"><h2 style="margin:0">Settings</h2><span class="spacer"></span><span class="small muted">Site version v18 · 17 Nov 2026</span></div><div class="grid g4">
     <label>Clinic / unit name<input id="st_clinic" value="${esc(st.clinic)}"></label><label>Veterinarian (printed)<input id="st_vet" value="${esc(st.vet)}"></label>
     <label>Max IM volume per site (ml)<input id="st_imMax" type="number" value="${esc(st.imMax)}"></label><label>Expiry warning (days)<input id="st_expiryDays" type="number" value="${esc(st.expiryDays)}"></label><label>Vaccination / deworming reminder (days before)<input id="st_remindDays" type="number" value="${esc(st.remindDays ?? 14)}"></label>
     <label>Next vaccination after (months)<input id="st_vaccMonths" type="number" min="0" value="${esc(st.vaccMonths ?? 12)}"></label><label>Next deworming after (months)<input id="st_dewormMonths" type="number" min="0" value="${esc(st.dewormMonths ?? 3)}"></label></div>

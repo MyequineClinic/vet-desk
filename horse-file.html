@@ -51,6 +51,8 @@
   .box button{padding:8px 12px;border:0;border-radius:4px;cursor:pointer;font-weight:bold}
   .b-rep{background:#8b5cf6;color:#fff}.b-imp{background:#0ea5e9;color:#fff}.b-formx{background:#14b8a6;color:#fff}
   [hidden]{display:none!important}
+  .vetline{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin:14px 0 4px;font-size:14px}
+  .vetline input{width:300px;border:0;border-bottom:1px solid #333;background:var(--inp);padding:4px 6px;font:inherit;font-weight:bold}
   /* right-side panel */
   .side{position:fixed;right:12px;top:62px;width:190px;display:flex;flex-direction:column;gap:6px;background:#fff;border-radius:8px;box-shadow:0 1px 8px rgba(0,0,0,.18);padding:10px;z-index:4;max-height:calc(100vh - 80px);overflow:auto}
   .side h4{margin:6px 0 0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.03em}
@@ -121,7 +123,7 @@
   <h4>Settings / الإعدادات</h4>
   <button class="b-set" id="btnLists">✏ Dropdown lists / القوائم</button>
   <button class="b-set" id="barHdr">✏ Heading &amp; date / العنوان</button>
-  <span class="ver">Horse File v17 · 17 Nov 2026</span>
+  <span class="ver">Horse File v18 · 17 Nov 2026</span>
 </aside>
 
 <div class="modal noprint" id="repModal"><div class="box">
@@ -279,7 +281,6 @@
       <div class="f span2"><label>Type of Equestrian Sport / <span class="ar">نوع الرياضة</span></label><select data-k="sport"><option></option><option>Show Jumping / قفز الحواجز</option><option>Flatwork / Dressage / تدريب أرضي</option><option>Eventing / حدث شامل</option><option>Other / أخرى</option></select></div>
       <div class="f"><label>Next Review / <span class="ar">مراجعة قادمة</span></label><input type="date" data-k="nextReview"></div>
       <div class="f"><label>Back to Training After / <span class="ar">عودة للتدريب بعد</span></label><input type="date" data-k="backToTraining"></div>
-      <div class="f"><label>Veterinarian / <span class="ar">الطبيب البيطري</span></label><input data-k="vet"></div>
       <div class="f"><label>Date / <span class="ar">التاريخ</span></label><input type="date" data-k="fileDate" id="fileDate"></div>
       <div class="f span4"><label>Signature / <span class="ar">التوقيع</span></label><input style="height:38px;background:#fff"></div>
     </div>
@@ -288,6 +289,7 @@
   <section class="r"><h2>I. Notes / ملاحظات</h2>
     <div class="grid"><div class="f span4"><textarea rows="5" data-k="notes"></textarea></div></div>
   </section>
+  <div class="vetline"><b>Veterinarian Doctor / <span class="ar">الطبيب البيطري</span>:</b><input data-k="vet" id="vetName" placeholder="Doctor's name / اسم الطبيب"></div>
 </div>
 
 <div class="actions noprint" id="actions">
@@ -312,9 +314,12 @@ const SETTINGS = {
 /* ================================================================ */
 
 const $ = s => document.querySelector(s);
+// Veterinarian Doctor line: remembers the last name typed on this device
+function vetDefault(){ const v=$("#vetName"); if(v && !v.value){ try{ v.value=localStorage.getItem("mec_hfvet")||""; }catch(e){} } }
 const status = t => $("#status").textContent = t;
 const today = () => new Date().toISOString().slice(0,10);
 $("#fileDate").value = today();
+vetDefault(); $("#vetName").addEventListener("input",e=>{ try{ localStorage.setItem("mec_hfvet",e.target.value.trim()); }catch(_){} });
 
 /* ---------- tables ---------- */
 const VACC = ["Equine Influenza / انفلونزا الخيل","Tetanus / التيتانوس","West Nile / حمى غرب النيل","Deworming / الديدان","Other / أخرى"];
@@ -381,7 +386,7 @@ function setForm(d={}){
 }
 $("#btnClear").onclick=()=>{ if(!confirm("Clear the form? / مسح النموذج؟"))return;
   document.querySelectorAll("[data-k],[data-v]").forEach(el=>{ if(!["div","kf"].includes(el.id)) el.value=""; });
-  $("#div").value=300; $("#kf").value=2.2; $("#fileDate").value=today(); window._siteRec=null; CUR=null; LOADED=null; LAST_F=null; LAST_H=null; $("#openRes").innerHTML=""; $("#idOffer").innerHTML=""; OFFER_FOR=""; $("#saveInfo").textContent=""; resetTreat(); calcWeight(); calcShoe(); calcVitals(); };
+  $("#div").value=300; $("#kf").value=2.2; $("#fileDate").value=today(); window._siteRec=null; CUR=null; LOADED=null; LAST_F=null; LAST_H=null; $("#openRes").innerHTML=""; $("#idOffer").innerHTML=""; OFFER_FOR=""; $("#saveInfo").textContent=""; resetTreat(); vetDefault(); calcWeight(); calcShoe(); calcVitals(); };
 
 /* ---------- DATA: your site's Firebase (same login), or this browser only ---------- */
 let db=null, ONLINE=false;
@@ -604,6 +609,7 @@ function applyData(f,mode){
     if(!hasT && f.treatment && f.treatment.length) resetTreat(f.treatment);
   }
   if(!$("#fileDate").value) $("#fileDate").value=today();
+  vetDefault();
   window._siteRec=f._weight||null; calcWeight(); calcShoe(); calcVitals();
 }
 
@@ -1288,6 +1294,8 @@ await checkSeed();
   body.pfit .pv.flag{background:#f8cbad!important;color:#9c0006;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   body.pfit td .pv{border:0;border-radius:0;min-height:0;padding:2px 4px}
   body.pfit .pe-ctl{display:none!important}
+  body.pfit .vetline{margin:8px 0 0;font-size:12px}
+  body.pfit .vetline .pv{border:0;border-bottom:1px solid #333;border-radius:0;min-width:220px;font-weight:bold;background:none}
   @media print{ body.pfit #form{break-inside:avoid} body.pfit section{break-inside:avoid} }
 </style>
 <script>
