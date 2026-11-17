@@ -1,7 +1,7 @@
 // My Equine Clinic – service worker
 // Network first: when online you always get the newest pages from GitHub;
 // the saved copy is used only when there is no connection.
-const CACHE = "vetdesk-v18";
+const CACHE = "vetdesk-v19";
 const CORE = ["./", "index.html", "horse-file.html", "manifest.json", "firebase-config.js"];
 
 self.addEventListener("install", e => {

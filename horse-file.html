@@ -123,7 +123,7 @@
   <h4>Settings / الإعدادات</h4>
   <button class="b-set" id="btnLists">✏ Dropdown lists / القوائم</button>
   <button class="b-set" id="barHdr">✏ Heading &amp; date / العنوان</button>
-  <span class="ver">Horse File v18 · 17 Nov 2026</span>
+  <span class="ver">Horse File v19 · 17 Nov 2026</span>
 </aside>
 
 <div class="modal noprint" id="repModal"><div class="box">
@@ -1393,7 +1393,7 @@ await checkSeed();
   const eligible = sel => {
     if (sel.multiple || sel.closest("[data-noother]")) return false;
     const o = [...sel.options].filter(x => x.value !== "" && x.value !== OTHER);
-    return o.length > 0 && o.every(x => x.value === x.text || x.value === x.text.trim()); // plain text choices only (not internal codes)
+    return o.length > 0 && o.every(x => x.value === x.text || x.value === x.text.trim() || x.dataset.tr === "1"); // plain text choices only (not internal codes)
   };
   function prep(){
     document.querySelectorAll("select").forEach(sel => {
@@ -1426,6 +1426,73 @@ await checkSeed();
   }
   document.addEventListener("input", handle, true);
   document.addEventListener("change", handle, true);
+})();
+</script>
+
+<!-- Language: English / Arabic / English + Arabic – changes only the words on screen, never your data -->
+<style>
+#langbar{position:fixed;left:10px;bottom:10px;z-index:9998;display:flex;gap:2px;background:#fff;border:1px solid #cbd5e1;border-radius:999px;padding:3px;box-shadow:0 2px 8px rgba(0,0,0,.18);font:600 12px Arial,Tahoma,sans-serif}
+#langbar button{border:0;background:transparent;padding:5px 10px;border-radius:999px;cursor:pointer;font:inherit;color:#334155}
+#langbar button.on{background:#1f3864;color:#fff}
+body.lang-en .ar:not(input):not(td):not(th){display:none!important}
+body.lang-ar .bi > :not(.ar):not(input):not(select):not(textarea){display:none!important}
+@media print{#langbar{display:none!important}}
+</style>
+<div id="langbar" class="noprint" data-notr title="Language / اللغة"><button data-lang="en">EN</button><button data-lang="ar">عربي</button><button data-lang="both">EN + عربي</button></div>
+<script>
+(function(){
+  const KEY = "mec_lang";
+  let MODE = "both"; try { MODE = localStorage.getItem(KEY) || "both"; } catch(e) {}
+  const ORIG = new WeakMap(), SHOWN = new WeakMap();
+  const AR = /[؀-ۿ]/, LAT = /[A-Za-z]/;
+  const SKIP = "script,style,textarea,input,[contenteditable='true'],[data-hdr],[data-notr],#fhint";
+  function pick(orig, el){
+    if (MODE === "both") return orig;
+    // "English / عربي" (or the other way round) in one piece of text
+    const m = orig.match(/^(\s*)(.*?)\s+\/\s+(.*?)(\s*)$/s);
+    if (m && ((LAT.test(m[2]) && AR.test(m[3]) && !AR.test(m[2])) || (AR.test(m[2]) && LAT.test(m[3]) && !AR.test(m[3])))) {
+      const en = AR.test(m[2]) ? m[3] : m[2], ar = AR.test(m[2]) ? m[2] : m[3];
+      return m[1] + (MODE === "en" ? en : ar) + m[4];
+    }
+    // "Patient ID / " followed by an Arabic span → hide the English part in Arabic mode
+    const nx = el && el.nodeType === 3 && el.nextSibling;
+    if (/\/\s*$/.test(orig) && nx && nx.nodeType === 1 && nx.classList && nx.classList.contains("ar")) {
+      if (MODE === "ar") return "";
+      if (MODE === "en") return orig.replace(/\s*\/\s*$/, "");
+    }
+    return orig;
+  }
+  function doText(n){
+    const el = n.parentElement; if (!el || el.closest(SKIP)) return;
+    const cur = n.nodeValue;
+    let orig = ORIG.get(n);
+    if (orig === undefined || cur !== SHOWN.get(n)) { orig = cur; ORIG.set(n, orig); }
+    if (!LAT.test(orig) && !AR.test(orig)) return;
+    if (el.tagName === "OPTION") { if (!el.hasAttribute("value")) el.setAttribute("value", orig.trim()); el.dataset.tr = "1"; } // the saved value stays the original
+    const out = pick(orig, n);
+    if (out !== cur) n.nodeValue = out;
+    SHOWN.set(n, out);
+  }
+  function walk(root){
+    if (!root) return;
+    if (root.nodeType === 3) return doText(root);
+    if (root.nodeType !== 1) return;
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n;
+    while ((n = w.nextNode())) doText(n);
+  }
+  let busy = false;
+  new MutationObserver(list => {
+    if (busy || MODE === "both") return; busy = true;
+    try { list.forEach(m => { if (m.type === "characterData") doText(m.target); else m.addedNodes.forEach(walk); }); } finally { busy = false; }
+  }).observe(document.body, {childList: true, subtree: true, characterData: true});
+  function setMode(m){
+    MODE = m; try { localStorage.setItem(KEY, m); } catch(e) {}
+    document.body.classList.remove("lang-en", "lang-ar", "lang-both"); document.body.classList.add("lang-" + m);
+    document.querySelectorAll("#langbar button").forEach(b => b.classList.toggle("on", b.dataset.lang === m));
+    busy = true; try { walk(document.body); } finally { busy = false; }
+  }
+  document.querySelectorAll("#langbar button").forEach(b => b.onclick = () => setMode(b.dataset.lang));
+  setMode(MODE);
 })();
 </script>
 
