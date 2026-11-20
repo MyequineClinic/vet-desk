@@ -686,19 +686,70 @@ function fsMsg(onlyLow){
   return `${ST().clinic || "My Equine Clinic"} – feed & hay store, ${dshow(today())}\n` + (L.map(x => `• ${x.it.item}: ${fdF(x.bal, 1)} kg left${x.perDay && x.status !== "Out of stock" ? `, ${fdF(x.perDay, 2)} kg/day → ${fsDaysTxt(x)} (until ${dshow(x.out)})` : ""}${x.status !== "OK" ? " – " + x.status.toUpperCase() : ""}`).join("\n") || "All items OK.") + med;
 }
 const fsContacts = () => { const c = fsCfg(); return Array.isArray(c.contacts) ? c.contacts.filter(x => x && (x.phone || x.email)) : c.phone ? [{name:"", phone:c.phone, email:""}] : []; };
+// ticked contacts only (no tick saved yet = ticked)
+const fsRecipients = () => fsContacts().filter(x => x.on !== false);
 const fsNum = s => String(s || "").replace(/[^\d+]/g, "");
-const fsPhone = () => fsContacts().map(x => fsNum(x.phone)).filter(Boolean).join(",");
+const fsPhone = () => fsRecipients().map(x => fsNum(x.phone)).filter(Boolean).join(",");
 const fsWaTo = (ph, txt) => `https://wa.me/${fsNum(ph).replace(/^\+/, "").replace(/^00/, "")}?text=${encodeURIComponent(txt)}`;
 const fsSms = txt => `sms:${fsPhone()}?&body=${encodeURIComponent(txt)}`;
-const fsMail = txt => `mailto:${fsContacts().map(x => String(x.email || "").trim()).filter(Boolean).join(",")}?subject=${encodeURIComponent("Feed & hay store – " + dshow(today()))}&body=${encodeURIComponent(txt)}`;
+const fsMail = txt => `mailto:${fsRecipients().map(x => String(x.email || "").trim()).filter(Boolean).join(",")}?subject=${encodeURIComponent("Feed & hay store – " + dshow(today()))}&body=${encodeURIComponent(txt)}`;
 // WhatsApp per number, one SMS to all numbers, one email to all addresses
 function fsSendLinks(txt){
-  const C = fsContacts(), ph = C.filter(x => fsNum(x.phone)), em = C.filter(x => String(x.email || "").includes("@"));
-  return [...ph.map(x => `<a class="btn small" href="${esc(fsWaTo(x.phone, txt))}" target="_blank" rel="noopener">WhatsApp ${esc(x.name || x.phone)}</a>`),
-    ph.length ? `<a class="btn small" href="${esc(fsSms(txt))}">SMS ${ph.length > 1 ? "all (" + ph.length + ")" : esc(ph[0].name || ph[0].phone)}</a>` : "",
-    em.length ? `<a class="btn small" href="${esc(fsMail(txt))}">Email ${em.length > 1 ? "all (" + em.length + ")" : esc(em[0].name || em[0].email)}</a>` : ""].join(" ");
+  const C = fsRecipients(), ph = C.filter(x => fsNum(x.phone)), em = C.filter(x => String(x.email || "").includes("@"));
+  return [C.length ? `<button class="small pri" data-fssend="${txt === fsMsg(true) ? "low" : "all"}" title="Sends directly to: ${esc(C.map(x => x.name || x.phone || x.email).join(", "))}">📤 Send now (${C.length})</button>` : "",
+    ...ph.map(x => `<a class="btn small" href="${esc(fsWaTo(x.phone, txt))}" target="_blank" rel="noopener" title="Opens WhatsApp">Open WhatsApp ${esc(x.name || x.phone)}</a>`),
+    ph.length ? `<a class="btn small" href="${esc(fsSms(txt))}">Open SMS ${ph.length > 1 ? "all (" + ph.length + ")" : esc(ph[0].name || ph[0].phone)}</a>` : "",
+    em.length ? `<a class="btn small" href="${esc(fsMail(txt))}">Open email ${em.length > 1 ? "all (" + em.length + ")" : esc(em[0].name || em[0].email)}</a>` : ""].join(" ");
 }
 let FS_CT = null; // contacts being edited
+const fsEJ = () => fsCfg().emailjs || {};
+const fsSleep = ms => new Promise(r => setTimeout(r, ms));
+async function fsSendDirect(txt, subject){
+  const C = fsRecipients(), ej = fsEJ(), out = {wa:[], waNoKey:[], em:[], emErr:[], emNoSetup:false};
+  for (const c of C.filter(x => fsNum(x.phone))) {
+    if (!String(c.wakey || "").trim()) { out.waNoKey.push(c.name || c.phone); continue; }
+    try { await fetch(`https://api.callmebot.com/whatsapp.php?source=web&phone=${encodeURIComponent(fsNum(c.phone))}&apikey=${encodeURIComponent(String(c.wakey).trim())}&text=${encodeURIComponent(txt)}`, {mode:"no-cors"}); out.wa.push(c.name || c.phone); }
+    catch(e){ out.waNoKey.push((c.name || c.phone) + " (network error)"); }
+    await fsSleep(1200);
+  }
+  const ems = C.map(x => String(x.email || "").trim()).filter(e => e.includes("@"));
+  if (ems.length && !(ej.service && ej.template && ej.key)) out.emNoSetup = true;
+  else for (const e of ems) {
+    try { const r = await fetch("https://api.emailjs.com/api/v1.0/email/send", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({service_id:ej.service, template_id:ej.template, user_id:ej.key, template_params:{to_email:e, subject, message:txt, clinic:ST().clinic || "My Equine Clinic"}})});
+      if (r.ok) out.em.push(e); else out.emErr.push(e + " – " + (await r.text()).slice(0, 120)); }
+    catch(err){ out.emErr.push(e + " – " + (err && err.message || err)); }
+    await fsSleep(1100);
+  }
+  return out;
+}
+const fsSendReport = o => [o.wa.length ? "WhatsApp sent to " + o.wa.join(", ") + "." : "", o.waNoKey.length ? "WhatsApp not sent (no CallMeBot key): " + o.waNoKey.join(", ") + "." : "",
+  o.em.length ? "Email sent to " + o.em.join(", ") + "." : "", o.emErr.length ? "Email failed: " + o.emErr.join("; ") + "." : "", o.emNoSetup ? "Email not sent – fill in the EmailJS settings." : ""].filter(Boolean).join(" ") || (fsContacts().length && !fsRecipients().length ? "Nobody is ticked – tick who gets messages in Notification settings." : "No mobile with a CallMeBot key and no email set up yet.");
+async function fsSendNow(onlyLow, btn){
+  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+  const o = await fsSendDirect(fsMsg(onlyLow), (onlyLow ? "Low stock – " : "Feed & hay store – ") + dshow(today()));
+  if (btn) { btn.disabled = false; btn.textContent = "📤 Send now (" + fsRecipients().length + ")"; }
+  toast(fsSendReport(o), 9000); return o;
+}
+// optional: once a day (for all devices together) when something is low – sent when the site is opened
+let FS_AUTO_BUSY = false;
+const FS_WD = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const fsFreq = c => c.autoFreq || (c.auto ? "daily" : "off");
+// weekly: due on the chosen weekday; if nobody opens the site that day, it goes the next time the site is opened
+const fsWeekDue = c => { const wd = N(c.autoDay) ?? 0, d = new Date(today() + "T00:00:00"); return bdAddDays(today(), -((d.getDay() - wd + 7) % 7)); };
+let FS_AUTO_DONE = ""; // sent in this browser today – never twice even if saving lastAuto is slow
+async function fsAutoDaily(){
+  if (FS_AUTO_BUSY || !S.live || FS_AUTO_DONE === today()) return;
+  let c, f;
+  try { c = fsCfg(); f = fsFreq(c); if (f === "off") return;
+    if (f === "daily") { if (c.lastAuto === today() || (!fsLow().length && !medCount(medAlerts()))) return; }
+    else if (c.lastAuto && c.lastAuto >= fsWeekDue(c)) return;
+  } catch(e){ return; }
+  FS_AUTO_BUSY = true; FS_AUTO_DONE = today();
+  try { await db.doc("config/feedStore").set(Object.assign({}, c, {lastAuto:today()}));
+    const o = f === "daily" ? await fsSendDirect(fsMsg(true), "Low stock – " + dshow(today())) : await fsSendDirect("Weekly report\n" + fsMsg(false), "Weekly feed, hay & medicine report – " + dshow(today()));
+    toast((f === "daily" ? "Daily alert: " : "Weekly report: ") + fsSendReport(o), 8000);
+  } catch(e){} finally { FS_AUTO_BUSY = false; }
+}
 // phone: through the site's service worker when it is installed, otherwise a normal browser notification
 const fsIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const fsStandalone = () => (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
@@ -749,12 +800,26 @@ function fsStoreView(body){
       <div class="row" style="margin-top:6px">${fsSendLinks(fsMsg(true))}</div></div>` : ""}</div>
   ${FS_SET ? `<div class="panel"><h3 style="margin-top:0">Notification settings – feed, hay and medicines</h3><div class="grid g4">
       <label>Warn when days left are<input id="fsAD" type="number" min="0" step="1" value="${esc(N(cfg.alertDays) ?? 7)}"></label></div>
-    <div class="fdconcs" style="margin-top:8px"><div class="row"><b class="small">Mobile numbers and email addresses</b><span class="small muted">for the WhatsApp / SMS / Email buttons</span><span class="spacer"></span><button class="small" id="fsCtAdd">+ Add mobile / email</button></div>
-      ${(FS_CT || []).map((x, i) => `<div class="row fdcrow"><input data-ct="${i}:name" value="${esc(x.name || "")}" placeholder="Name (e.g. Store keeper)" style="flex:1 1 160px;min-width:150px;width:auto"><input data-ct="${i}:phone" value="${esc(x.phone || "")}" placeholder="Mobile with country code, e.g. +965 5xxx xxxx" inputmode="tel" style="flex:1 1 200px;min-width:190px;width:auto"><input data-ct="${i}:email" value="${esc(x.email || "")}" placeholder="Email" type="email" style="flex:1 1 220px;min-width:200px;width:auto"><button class="small danger" data-ctd="${i}" title="Remove">✕</button></div>`).join("") || '<p class="small muted" style="margin:4px 0">No numbers yet – press “+ Add mobile / email”.</p>'}</div>
+    <div class="fdconcs" style="margin-top:8px"><div class="row"><b class="small">Mobile numbers and email addresses</b><span class="small muted">tick who gets messages (automatic and 📤 Send now)</span><span class="spacer"></span><button class="small" id="fsCtAll">Tick all</button><button class="small" id="fsCtNone">Untick all</button><button class="small" id="fsCtAdd">+ Add mobile / email</button></div>
+      <details class="small" style="margin:4px 0 6px"><summary><b>How to send WhatsApp directly (free CallMeBot key – once per mobile)</b></summary><ol style="margin:4px 0">
+        <li>On that mobile, open <a href="https://www.callmebot.com/blog/free-api-whatsapp-messages/" target="_blank" rel="noopener">callmebot.com → WhatsApp</a> and save the CallMeBot WhatsApp number shown there in Contacts.</li>
+        <li>From WhatsApp send it: <b>I allow callmebot to send me messages</b></li><li>It replies with your <b>APIKEY</b> – type it in “CallMeBot key” next to that mobile and press Save.</li></ol>Free for personal use; messages pass through CallMeBot.</details>
+      ${(FS_CT || []).map((x, i) => `<div class="row fdcrow"><label class="bdchk" title="Gets messages" style="min-width:auto"><input type="checkbox" data-cton="${i}"${x.on !== false ? " checked" : ""}> Send</label><input data-ct="${i}:name" value="${esc(x.name || "")}" placeholder="Name (e.g. Store keeper)" style="flex:1 1 160px;min-width:150px;width:auto"><input data-ct="${i}:phone" value="${esc(x.phone || "")}" placeholder="Mobile with country code, e.g. +965 5xxx xxxx" inputmode="tel" style="flex:1 1 200px;min-width:190px;width:auto"><input data-ct="${i}:wakey" value="${esc(x.wakey || "")}" placeholder="CallMeBot key (WhatsApp)" style="flex:1 1 150px;min-width:140px;width:auto"><input data-ct="${i}:email" value="${esc(x.email || "")}" placeholder="Email" type="email" style="flex:1 1 220px;min-width:200px;width:auto"><button class="small danger" data-ctd="${i}" title="Remove">✕</button></div>`).join("") || '<p class="small muted" style="margin:4px 0">No numbers yet – press “+ Add mobile / email”.</p>'}</div>
+    <div class="fdconcs" style="margin-top:8px"><div class="row"><b class="small">Send email directly (free EmailJS account)</b></div>
+      <div class="grid g4" style="margin-top:4px"><label>Service ID<input id="fsEjS" value="${esc(fsEJ().service || "")}" placeholder="service_xxxxxxx"></label><label>Template ID<input id="fsEjT" value="${esc(fsEJ().template || "")}" placeholder="template_xxxxxxx"></label><label>Public key<input id="fsEjK" value="${esc(fsEJ().key || "")}" placeholder="from Account → General"></label></div>
+      <details class="small" style="margin:6px 0 0"><summary><b>How to set up EmailJS (once, about 5 minutes)</b></summary><ol style="margin:4px 0">
+        <li>Create a free account at <a href="https://www.emailjs.com/" target="_blank" rel="noopener">emailjs.com</a> (200 emails a month free).</li>
+        <li><b>Email Services → Add New Service</b> → Gmail (or Outlook) → connect your mailbox → copy the <b>Service ID</b>.</li>
+        <li><b>Email Templates → Create New Template</b>: <b>To Email</b> = <code>{{to_email}}</code>, <b>Subject</b> = <code>{{subject}}</code>, <b>Content</b> = <code>{{message}}</code> → Save → copy the <b>Template ID</b>.</li>
+        <li><b>Account → General</b> → copy the <b>Public Key</b>. Under <b>Account → Security</b> add your site address to the allowed domains.</li>
+        <li>Paste the three values here and press Save.</li></ol></details></div>
+    <div class="grid g4" style="margin-top:8px"><label>Send automatically (WhatsApp + email)<select id="fsAutoF" data-noother><option value="off"${fsFreq(cfg) === "off" ? " selected" : ""}>Off</option><option value="daily"${fsFreq(cfg) === "daily" ? " selected" : ""}>Daily – only when something is low</option><option value="weekly"${fsFreq(cfg) === "weekly" ? " selected" : ""}>Once a week – full report</option></select></label>
+      <label>Weekly report day<select id="fsAutoD" data-noother>${FS_WD.map((d, i) => `<option value="${i}"${(N(cfg.autoDay) ?? 0) === i ? " selected" : ""}>${d}</option>`).join("")}</select></label></div>
+    <p class="small muted" style="margin:4px 0 0">Sent the first time the site is opened on that day, on any device${cfg.lastAuto ? ` · last sent ${esc(dshow(cfg.lastAuto))}` : ""}. Weekly = all feed &amp; hay balances with days remaining + medicines expired / expiring / out of stock / reorder.</p>
     <div class="row" style="margin-top:8px"><button class="pri" id="fsSaveSet">Save</button><button id="fsPerm">🔔 Turn on notifications on this device</button><button id="fsTest">Send test notification</button><button id="fsSetC">Close</button></div>
     <div class="row" style="margin-top:6px"><b class="small">Send today's balance:</b>${fsSendLinks(fsMsg(false)) || '<span class="small muted">add a mobile or email first, then Save</span>'}</div>
     <p class="small" id="fsTestMsg" style="margin:6px 0 0"></p>
-    <p class="small muted" style="margin:6px 0 0">Device notifications: <b>${esc(notifState)}</b>. A notification appears on the phone / computer where you opened the site and pressed “Turn on notifications” – do it once on each device. You then get one notification a day when you open the site for feed / hay running low, and one for medicines (expired, expiring soon, out of stock, reorder level – from Stock). <b>iPhone:</b> Safari → Share → Add to Home Screen, open the site from that icon, then turn notifications on. The mobile numbers and emails are for the WhatsApp / SMS / Email buttons – they open your phone's app with the message ready and you press Send. Sending automatically without opening the site needs a paid SMS / email service.</p></div>` : ""}
+    <p class="small muted" style="margin:6px 0 0">Device notifications: <b>${esc(notifState)}</b>. A notification appears on the phone / computer where you opened the site and pressed “Turn on notifications” – do it once on each device. You then get one notification a day when you open the site for feed / hay running low, and one for medicines (expired, expiring soon, out of stock, reorder level – from Stock). <b>iPhone:</b> Safari → Share → Add to Home Screen, open the site from that icon, then turn notifications on. <b>📤 Send now</b> sends straight from the site – WhatsApp to every mobile with a CallMeBot key and email to every address (EmailJS). “Open …” buttons open the app instead. Nothing is sent while nobody opens the site – that would need a paid service on a server.</p></div>` : ""}
   ${E ? `<div class="panel"><h3 style="margin-top:0">${E._id ? "Edit item" : "Add item"}</h3><div class="grid g4">
       <label>Item<input id="fsItem" list="fsNames" value="${esc(E.item || "")}" placeholder="choose or type"><datalist id="fsNames">${names.map(n => `<option value="${esc(n)}">`).join("")}</datalist></label>
       <label>Category<select id="fsCat" data-noother>${fdOpt(FS_CATS, E.category || "Hay")}</select></label>
@@ -776,6 +841,7 @@ function fsStoreView(body){
     <p class="small muted" style="margin:6px 0 0">Received = adds to the balance. Count = replaces the balance with what you weighed / counted. Hover “auto” to see which horses use the item.</p></div>
   <div class="panel"><h3 style="margin-top:0">History</h3><div class="tbl"><table class="fdtab"><thead><tr><th>Date</th><th>Item</th><th>Action</th><th class="num">Kg</th><th>Note</th></tr></thead><tbody>
     ${moves.map(m => `<tr><td>${esc(dshow(m.date))}</td><td>${esc(m.item)}</td><td>${esc(m.kind)}</td><td class="num">${fdF(m.kg, 1)}</td><td class="small">${esc(m.note || "")}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">Nothing yet.</td></tr>'}</tbody></table></div></div>`;
+  body.querySelectorAll("[data-fssend]").forEach(b => b.onclick = () => fsSendNow(b.dataset.fssend === "low", b));
   const get = id => (S.feedStore || []).find(x => x._id === id);
   $("#fsAdd").onclick = () => { FS_EDIT = {mode:"auto"}; render(true); };
   const au = $("#fsAddUsed"); if (au) au.onclick = async () => { for (const n of used) { const f = FCFG().feeds.find(x => x.feed === n); await W(() => db.collection("feedStore").add({item:n, category:f && FS_CATS.includes(f.category) ? f.category : (fdHays && feedsOf("Hay").includes(n) ? "Hay" : "Other"), balanceKg:null, asOf:today(), mode:"auto", createdAt:new Date().toISOString()})); } toast(`${used.length} item(s) added – enter each balance with Count.`); };
@@ -784,10 +850,13 @@ function fsStoreView(body){
     if (!FS_CT) FS_CT = fsContacts().map(x => Object.assign({}, x));
     body.querySelectorAll("[data-ct]").forEach(el => el.oninput = () => { const [i, k] = el.dataset.ct.split(":"); FS_CT[+i][k] = el.value; });
     body.querySelectorAll("[data-ctd]").forEach(b => b.onclick = () => { FS_CT.splice(+b.dataset.ctd, 1); render(true); });
-    $("#fsCtAdd").onclick = () => { FS_CT.push({name:"", phone:"", email:""}); render(true); };
-    $("#fsSaveSet").onclick = async () => { const contacts = FS_CT.map(x => ({name:String(x.name || "").trim(), phone:String(x.phone || "").trim(), email:String(x.email || "").trim()})).filter(x => x.phone || x.email);
+    $("#fsCtAdd").onclick = () => { FS_CT.push({on:true, name:"", phone:"", email:""}); render(true); };
+    body.querySelectorAll("[data-cton]").forEach(el => el.onchange = () => { FS_CT[+el.dataset.cton].on = el.checked; });
+    $("#fsCtAll").onclick = () => { FS_CT.forEach(x => x.on = true); render(true); };
+    $("#fsCtNone").onclick = () => { FS_CT.forEach(x => x.on = false); render(true); };
+    $("#fsSaveSet").onclick = async () => { const contacts = FS_CT.map(x => ({on:x.on !== false, name:String(x.name || "").trim(), phone:String(x.phone || "").trim(), wakey:String(x.wakey || "").trim(), email:String(x.email || "").trim()})).filter(x => x.phone || x.email);
       const bad = contacts.find(x => x.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.email)); if (bad) return toast("Check the email: " + bad.email);
-      const d = Object.assign({}, cfg, {contacts, alertDays:N($("#fsAD").value) ?? 7, updatedAt:new Date().toISOString()}); delete d.phone;
+      const d = Object.assign({}, cfg, {contacts, alertDays:N($("#fsAD").value) ?? 7, autoFreq:$("#fsAutoF").value, autoDay:+$("#fsAutoD").value, emailjs:{service:$("#fsEjS").value.trim(), template:$("#fsEjT").value.trim(), key:$("#fsEjK").value.trim()}, updatedAt:new Date().toISOString()}); delete d.phone;
       await W(() => db.doc("config/feedStore").set(d)); toast("Saved."); };
     const tmsg = (ok, t) => { const m = $("#fsTestMsg"); if (m) { m.className = "small" + (ok ? "" : " fdred"); m.textContent = t; } };
     $("#fsPerm").onclick = async () => { const r = await fsNotify("My Equine Clinic", "Notifications are on for this device."); toast(r.ok ? "Notifications are on for this device." : "Not turned on – see the message below."); render(true); setTimeout(() => tmsg(r.ok, r.ok ? "✓ Turned on – you should see a notification now." : r.why), 50); };
@@ -3182,7 +3251,7 @@ function drawNotif(){
     ["deworm", `🪱 Next deworming: ${dew.length}${od(dew)}`, dew, dew.some(r => daysUntil(r.next) < 0) ? "bad" : "warn"],
     ["notes", `📝 Notes due: ${notesDue().length}`, notesDue(), notesDue().some(n => daysUntil(n.due) < 0) ? "bad" : "warn"], ...(() => { let f = []; try { f = fsLow(); } catch(e){} return [["feed", `🌾 Feed & hay low: ${f.length}`, f, f.some(x => x.status === "Out of stock") ? "bad" : "warn"]]; })(),
     ...(() => { let m = {short:[], reorder:[]}; try { m = medAlerts(); } catch(e){} const l = [...m.short, ...m.reorder]; return [["medlow", `📦 Medicine out of stock / reorder: ${l.length}`, l, m.short.length ? "bad" : "warn"]]; })()].filter(c => c[2].length);
-  fsDaily(); medDaily();
+  fsDaily(); medDaily(); fsAutoDaily();
   if (!chips.length) { el.innerHTML = ""; return; }
   if (!chips.some(c => c[0] === notifOpen)) notifOpen = "";
   const open = chips.find(c => c[0] === notifOpen);
@@ -3200,6 +3269,7 @@ function drawNotif(){
   el.querySelector("#nHide").onclick = () => { notifHidden = true; drawNotif(); };
   el.querySelectorAll("[data-ns]").forEach(b => b.onclick = () => { const x = S.stock.find(y => y._id === b.dataset.ns); if (!x) return; stockG = "all"; stockF = "all"; stockQ = x.item || ""; notifOpen = ""; drawNotif(); if (location.hash === "#stock") render(true); else location.hash = "#stock"; });
   el.querySelectorAll("[data-np]").forEach(b => b.onclick = () => { const r = S.preventive.find(y => y._id === b.dataset.np); if (r) { notifOpen = ""; drawNotif(); openPatient(r.pid, r.name); } });
+  el.querySelectorAll("[data-fssend]").forEach(b => b.onclick = () => fsSendNow(b.dataset.fssend === "low", b));
   el.querySelectorAll("[data-nfs]").forEach(b => b.onclick = () => { notifOpen = ""; drawNotif(); FD_TAB = "store"; if (location.hash === "#feeding") render(true); else location.hash = "#feeding"; });
   el.querySelectorAll("[data-nnote]").forEach(b => b.onclick = () => { notifOpen = ""; drawNotif(); editClinicNote(b.dataset.nnote); });
   el.querySelectorAll("[data-nall]").forEach(b => b.onclick = () => { if (b.dataset.nall === "notes") { notifOpen = ""; drawNotif(); location.hash = "#notes"; return; } histMode = b.dataset.nall; prevF = "due"; notifOpen = ""; drawNotif(); if (location.hash === "#vaccdew") render(true); else location.hash = "#vaccdew"; });
