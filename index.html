@@ -243,15 +243,19 @@ a.btn{display:inline-block;font-weight:600;font-size:14px;padding:7px 12px;borde
 @keyframes fxRingOnce{0%,100%{transform:rotate(0)}15%{transform:rotate(12deg)}30%{transform:rotate(-10deg)}45%{transform:rotate(6deg)}60%{transform:rotate(-3deg)}}
 @keyframes navIn{from{transform:scaleX(0);opacity:.3}to{transform:scaleX(1);opacity:1}}
 #main.vt-in>.panel,#main.vt-in>div>.panel{animation:vtFade .35s ease-out both;animation-delay:calc(var(--i,0)*40ms)}
-.fx-num{font-variant-numeric:tabular-nums;animation:fxFade .4s ease-out both}
+@keyframes fxFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes fxPopSoft{0%{transform:scale(.7);opacity:0}65%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+.fx-num{display:inline-block;font-variant-numeric:tabular-nums;animation:fxPopSoft .55s cubic-bezier(.2,.8,.2,1) both}
+.fx-tile .fx-big{display:inline-block;animation:fxFloat 3.2s ease-in-out infinite}
+#ncFab.ring{animation:fxFloat 3.5s ease-in-out infinite}
 .fx-tile{transition:transform .25s ease,box-shadow .25s ease}.fx-tile:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.10)}
 nav a{position:relative;transition:background .2s,opacity .2s}
 nav a.on{border-bottom-color:transparent}nav a.on::after{content:"";position:absolute;left:6px;right:6px;bottom:-3px;height:3px;background:#9fd0ff;border-radius:3px;transform-origin:center;animation:navIn .4s ease-out}
 #ncFab{transition:transform .2s ease,box-shadow .2s ease}#ncFab:hover{transform:scale(1.06)}
 #ncFab.ring .cnt{animation:fxBreath 3.2s ease-in-out infinite}
 #ncFab.pop .bell{display:inline-block;transform-origin:50% 10%;animation:fxRingOnce 1.1s ease-in-out}
-@media (prefers-reduced-motion:reduce){#main.vt-in>.panel,#main.vt-in>div>.panel,.fx-num,#ncFab.ring .cnt,#ncFab.pop .bell,nav a.on::after{animation:none!important}}
-@media print{.fx-num{animation:none!important}}
+@media (prefers-reduced-motion:reduce){#main.vt-in>.panel,#main.vt-in>div>.panel,.fx-num,.fx-tile .fx-big,#ncFab.ring,#ncFab.ring .cnt,#ncFab.pop .bell,nav a.on::after{animation:none!important}}
+@media print{.fx-num,.fx-big{animation:none!important}}
 /* ---- morph reveal: panels and their subsections come one by one (blur → sharp, slight grow) ---- */
 @keyframes mxPanel{from{opacity:0;transform:translateY(10px) scale(.985);border-radius:22px}to{opacity:1;transform:none}}
 @keyframes mxSub{0%{opacity:0;filter:blur(6px);transform:translateY(8px) scale(.97)}60%{opacity:1;filter:blur(1px)}100%{opacity:1;filter:none;transform:none}}
@@ -260,6 +264,32 @@ nav a.on{border-bottom-color:transparent}nav a.on::after{content:"";position:abs
 .mx-sub{animation:mxSub .55s cubic-bezier(.22,.8,.3,1) both}
 @media (prefers-reduced-motion:reduce){.mx-wait{opacity:1!important}.mx-panel,.mx-sub{animation:none!important}}
 @media print{.mx-wait{opacity:1!important}.mx-panel,.mx-sub{animation:none!important}}
+/* ---- hover: soft highlight on menus, sections, subsections, horse / prescription / history items; icons glow while the cursor rests on them ---- */
+@keyframes icGlow{0%,100%{filter:drop-shadow(0 0 1px rgba(255,214,110,.55)) drop-shadow(0 0 3px rgba(120,180,255,.35))}50%{filter:drop-shadow(0 0 4px rgba(255,214,110,.95)) drop-shadow(0 0 10px rgba(120,180,255,.7))}}
+.fx-ic{display:inline-block}
+.panel{transition:box-shadow .3s ease,border-color .3s ease}
+.visit,.tile,.hcard,.found-card,.tbl tbody tr,.panel table tbody tr,.notif .it,.notif .chip,.gs-it,.pick-item{transition:background .22s ease,box-shadow .22s ease,transform .22s ease}
+@media (hover:hover) and (pointer:fine){
+  nav a:hover{background:rgba(255,255,255,.14);opacity:1;box-shadow:0 0 14px rgba(159,208,255,.45);text-shadow:0 0 8px rgba(159,208,255,.75)}
+  .panel:hover{box-shadow:0 6px 22px rgba(31,56,100,.12),0 0 0 1px rgba(80,140,230,.28)}
+  .panel.fx-spot{background-image:radial-gradient(280px circle at var(--mx,50%) var(--my,50%),rgba(110,160,255,.10),transparent 70%)}
+  .panel :is(.fdconcs,details,.calc,.rxsheet,.kv,.hcard,.found-card,.bdrow,.htrow,.inv-row,.info,.warnlist){transition:background .25s ease,box-shadow .25s ease;border-radius:6px}
+  .panel :is(.fdconcs,details,.calc,.rxsheet,.kv,.hcard,.found-card,.bdrow,.htrow,.inv-row,.info,.warnlist):hover{background-color:rgba(80,140,230,.06);box-shadow:0 0 0 1px rgba(80,140,230,.22)}
+  .panel .grid>label{transition:background .2s ease;border-radius:5px}.panel .grid>label:hover{background:rgba(80,140,230,.05)}
+  .tbl tbody tr:hover,.panel table tbody tr:hover{background:rgba(80,140,230,.09)!important;box-shadow:inset 3px 0 0 rgba(80,140,230,.65)}
+  .visit:hover{box-shadow:0 5px 18px rgba(0,0,0,.10),0 0 0 1px rgba(80,140,230,.35);transform:translateY(-1px)}
+  .tile:hover,.hcard:hover,.found-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.12),0 0 0 1px rgba(80,140,230,.3)}
+  .notif .it:hover,.gs-it:hover,.pick-item:hover{background:rgba(80,140,230,.10)}
+  .notif .chip:hover{box-shadow:0 0 12px rgba(80,140,230,.45)}
+  button:hover,a.btn:hover{box-shadow:0 0 0 3px rgba(80,140,230,.16),0 0 12px rgba(80,140,230,.25)}
+  :is(nav a,button,a.btn,h2,h3,h4,.chip,.tile,.visit,.it,label,.panel>.row):hover .fx-ic{animation:icGlow 1.6s ease-in-out infinite}
+  #ncFab:hover .bell{animation:icGlow 1.4s ease-in-out infinite}
+}
+nav a.on .fx-ic{animation:icGlow 2.6s ease-in-out infinite}
+#ncFab.ring .bell{display:inline-block;animation:icGlow 2.6s ease-in-out infinite}
+#ncFab.pop .bell{animation:fxRingOnce 1.1s ease-in-out,icGlow 2.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.fx-ic,#ncFab .bell{animation:none!important}.visit:hover,.tile:hover,.hcard:hover,.found-card:hover{transform:none}}
+@media print{.panel.fx-spot{background-image:none}.fx-ic{animation:none!important;filter:none!important}}
 </style>
 </head>
 <body>
@@ -1948,7 +1978,7 @@ function fxCount(node, delay){
   const orig = node.nodeValue, m = orig.match(/(\d[\d,]*)(\.\d+)?/); if (!m) return;
   const end = parseFloat(m[0].replace(/,/g, "")); if (!isFinite(end) || end === 0 || end > 1e7) return;
   const dec = m[2] ? m[2].length - 1 : 0, pre = orig.slice(0, m.index), post = orig.slice(m.index + m[0].length);
-  const dur = Math.min(900, 450 + Math.log10(end + 1) * 150), el = node.parentElement;
+  const dur = Math.min(1300, 600 + Math.log10(end + 1) * 230), el = node.parentElement;
   if (el && !el.classList.contains("fx-num")) el.classList.add("fx-num");
   let t0 = null;
   const step = t => { if (t0 === null) t0 = t + (delay || 0); const k = Math.max(0, Math.min(1, (t - t0) / dur)), e = 1 - Math.pow(1 - k, 3);
@@ -1957,17 +1987,53 @@ function fxCount(node, delay){
     const v = end * e; node.nodeValue = pre + (dec ? v.toFixed(dec) : Math.round(v).toLocaleString("en-US")) + post; requestAnimationFrame(step); };
   node.nodeValue = pre + (dec ? (0).toFixed(dec) : "0") + post; requestAnimationFrame(step);
 }
-function fxNumbers(root){
+const FX_DONE = new WeakSet();
+function fxNumbers(root, exclude, loose){
   if (!root || !FX_OK()) return;
-  const out = [];
-  root.querySelectorAll("[data-count],.pill,.chip,.cnt").forEach(el => {
-    if (out.length >= 30 || el.closest("[data-notr],input,select,textarea") || (el.closest("td") && !el.closest(".pill"))) return;
-    [...el.childNodes].forEach(n => { if (n.nodeType === 3 && /^\s*[\d,]+\s*$/.test(n.nodeValue) && !FX_DATE.test(n.nodeValue)) out.push(n);
-      else if (n.nodeType === 3 && /^\s*\d+ (due|to check)\s*$/.test(n.nodeValue) && (!window.LANG || window.LANG.mode() === "en")) out.push(n); });
-  });
-  out.forEach((t, i) => fxCount(t, Math.min(i, 8) * 40));
-  root.querySelectorAll("[data-ncgo]").forEach(b => b.classList.add("fx-tile"));
+  const en = !window.LANG || window.LANG.mode() === "en", out = [];
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n;
+  while ((n = w.nextNode()) && out.length < 60) {
+    const v = n.nodeValue, el = n.parentElement; if (!el || !/\d/.test(v) || FX_DONE.has(n)) continue;
+    if (exclude && exclude.some(x => x !== root && x.contains(el))) continue; // counted when that part appears
+    if (el.closest("script,style,textarea,select,option,input,[data-notr],[contenteditable='true'],.gs-res,#toast")) continue;
+    if (FX_DATE.test(v) || (v.match(/\d+(?:[.,]\d+)*/g) || []).length > 1) continue;
+    const pure = /^\s*[\d,]+(\.\d+)?\s*$/.test(v);
+    if (!pure && (!en || v.trim().length > 40)) continue; // words around the number: only in English (keeps the language switch safe)
+    if (el.closest("td") && !el.closest(".pill")) continue; // table data (doses, balances) stays still
+    const big = parseFloat(getComputedStyle(el).fontSize) >= 20;
+    if (!(big || loose || el.closest(".pill,.chip,h1,h2,h3,h4,[data-count],.fx-tile,.cnt,.kpi,.stat,.tile,b,strong"))) continue;
+    if (loose && !pure && v.trim().length > 30) continue;
+    out.push(n);
+  }
+  out.forEach((t, i) => { FX_DONE.add(t); fxCount(t, Math.min(i, 12) * 45); });
+  // summary boxes: lift on hover, big number floats gently
+  root.querySelectorAll("[data-ncgo],.kpi,.stat,.tile").forEach(b => { b.classList.add("fx-tile"); const big = [...b.querySelectorAll("div,span,b")].find(x => /^\s*[\d,.]+\s*$/.test(x.textContent) && parseFloat(getComputedStyle(x).fontSize) >= 20); if (big) big.classList.add("fx-big"); });
+  if (root.matches && root.matches("[data-ncgo],.kpi,.stat,.tile")) { root.classList.add("fx-tile"); }
 }
+
+/* icons: the emoji at the start of a menu item, heading, button or chip gets its own span so it can glow on hover
+   (done right after the page is drawn, before the language switch reads the text – saved data is never touched) */
+const FX_EMO = /^(\s*)((?:\p{Extended_Pictographic}|[☀-➿])(?:️|‍(?:\p{Extended_Pictographic}|[☀-➿]))*️?)/u;
+function fxIcons(root){
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll("nav a,h2,h3,h4,button,a.btn,.chip,.tile .l,.panel>.row>b,summary").forEach(el => {
+    if (el.closest("[data-notr],textarea,select") || el.querySelector(".fx-ic")) return;
+    const t = [...el.childNodes].find(n => n.nodeType === 3 && n.nodeValue.trim()) ; if (!t || t !== [...el.childNodes].find(n => n.nodeType === 3 || n.nodeType === 1)) return;
+    const m = t.nodeValue.match(FX_EMO); if (!m) return;
+    const sp = document.createElement("span"); sp.className = "fx-ic"; sp.setAttribute("aria-hidden", "true"); sp.textContent = m[2];
+    t.nodeValue = m[1] + t.nodeValue.slice(m[0].length); el.insertBefore(sp, t);
+  });
+}
+// soft light that follows the cursor inside the section under it
+(function(){
+  let cur = null, raf = 0, ev = null;
+  document.addEventListener("pointermove", e => { if (e.pointerType !== "mouse") return; ev = e; if (raf) return; raf = requestAnimationFrame(() => { raf = 0;
+    const p = ev.target && ev.target.closest ? ev.target.closest("#main .panel") : null;
+    if (p !== cur) { if (cur) cur.classList.remove("fx-spot"); cur = p; if (p && FX_OK()) p.classList.add("fx-spot"); }
+    if (cur) { const r = cur.getBoundingClientRect(); cur.style.setProperty("--mx", (ev.clientX - r.left) + "px"); cur.style.setProperty("--my", (ev.clientY - r.top) + "px"); } }); }, {passive:true});
+  document.addEventListener("pointerleave", () => { if (cur) cur.classList.remove("fx-spot"); cur = null; });
+})();
+try { fxIcons(document.getElementById("nav")); } catch(e){}
 let MX_IO = null, MX_T = null;
 function mxPlay(el, delay, cls){
   el.style.animationDelay = delay + "ms"; el.classList.remove("mx-wait"); el.classList.add(cls);
@@ -1983,17 +2049,18 @@ function fxEnter(){
   panels.forEach(p => { const subs = [...p.querySelectorAll(SUB)].slice(0, 10); (p.getBoundingClientRect().top < vh ? now : later).push({p, subs}); p.classList.add("mx-wait"); subs.forEach(x => x.classList.add("mx-wait")); });
   // on screen: one after another
   let t = 0;
-  now.forEach(({p, subs}) => { mxPlay(p, Math.min(t, 1200), "mx-panel"); t += 70;
-    subs.forEach(x => { mxPlay(x, Math.min(t, 1500), "mx-sub"); t += 55; }); t += 40; });
+  const cnt = view !== "rx" && view !== "patient", fxAt = (el, d, ex, loose) => { if (cnt) setTimeout(() => { if (el.isConnected) fxNumbers(el, ex, loose); }, d + 120); };
+  now.forEach(({p, subs}) => { const dp = Math.min(t, 1200); mxPlay(p, dp, "mx-panel"); fxAt(p, dp, subs); t += 70;
+    subs.forEach(x => { const ds = Math.min(t, 1500); mxPlay(x, ds, "mx-sub"); fxAt(x, ds, null, true); t += 55; }); t += 40; });
   // further down: each panel morphs in when you scroll to it
   if (later.length && "IntersectionObserver" in window) {
     MX_IO = new IntersectionObserver(es => es.forEach(e => { if (!e.isIntersecting) return; MX_IO.unobserve(e.target);
-      const it = later.find(x => x.p === e.target); if (!it) return; let d = 0; mxPlay(it.p, 0, "mx-panel"); it.subs.forEach(x => { d += 55; mxPlay(x, d, "mx-sub"); }); }), {rootMargin:"0px 0px -8% 0px"});
+      const it = later.find(x => x.p === e.target); if (!it) return; let d = 0; mxPlay(it.p, 0, "mx-panel"); fxAt(it.p, 0, it.subs); it.subs.forEach(x => { d += 55; mxPlay(x, d, "mx-sub"); fxAt(x, d, null, true); }); }), {rootMargin:"0px 0px -8% 0px"});
     later.forEach(x => MX_IO.observe(x.p));
   } else later.forEach(({p, subs}) => { p.classList.remove("mx-wait"); subs.forEach(x => x.classList.remove("mx-wait")); });
   // safety: nothing ever stays hidden (e.g. a part that was hidden while loading)
   MX_T = setTimeout(() => main.querySelectorAll(".mx-wait").forEach(e => e.classList.remove("mx-wait")), 8000);
-  if (view !== "rx" && view !== "patient") fxNumbers(main);
+  if (cnt) { setTimeout(() => fxNumbers($("#notif")), 200); if (!panels.length) fxNumbers(main); }
 }
 let FX_FIRST = false;
 const VIEWS = {alerts:renderAlerts, breeding:renderBreeding, feeding:renderFeeding, rx:renderRx, patient:renderPatient, history:renderHistory, vaccdew:renderPrevList, notes:renderNotes, stock:renderStock, horses:renderHorses, meds:renderMeds, finder:renderFinder, diseases:renderDiseases, settings:renderSettings};
@@ -2013,6 +2080,7 @@ function render(full){
   if (!full && document.querySelector(".modal-bg")) return;
   main.dataset.v = view;
   VIEWS[view](main);
+  try { fxIcons(main); } catch(e){}
   if (!FX_FIRST && S.live && db) { FX_FIRST = true; try { fxEnter(); } catch(e){} }
 }
 
@@ -3545,6 +3613,7 @@ function drawNotif(){
     : open[2].map(r => `<button class="it" data-np="${esc(r._id)}"><b>${esc(prevHorseName(r))}</b>${r.pid ? ` (ID ${esc(r.pid)})` : ""} – ${esc(r.drug)} – <span class="${daysUntil(r.next) < 0 ? "red" : "note"}">${esc(when(r.next))}</span></button>`).join("")
       + `<div class="row" style="padding:6px 0"><button class="small" data-nall="${open[0]}">Open ${KLAB[open[0]].toLowerCase()} record</button></div>`);
   el.innerHTML = `<div class="notif"><div class="bar" role="region" aria-label="Notifications"><b>🔔</b>${chips.map(c => `<button class="chip ${c[3]}${c[0] === notifOpen ? " on" : ""}" data-nc="${c[0]}" aria-expanded="${c[0] === notifOpen}">${esc(c[1])} ${c[0] === notifOpen ? "▴" : "▾"}</button>`).join("")}<span class="spacer"></span><a class="btn small" href="#alerts">See all / share</a><button class="small" id="nHide" title="Hide until reload">✕</button></div>${items ? `<div class="list">${items}</div>` : ""}</div>`;
+  try { fxIcons(el); } catch(e){}
   el.querySelectorAll("[data-nc]").forEach(b => b.onclick = () => { notifOpen = notifOpen === b.dataset.nc ? "" : b.dataset.nc; drawNotif(); });
   el.querySelector("#nHide").onclick = () => { notifHidden = true; drawNotif(); };
   el.querySelectorAll("[data-ns]").forEach(b => b.onclick = () => { const x = S.stock.find(y => y._id === b.dataset.ns); if (!x) return; stockG = "all"; stockF = "all"; stockQ = x.item || ""; notifOpen = ""; drawNotif(); if (location.hash === "#stock") render(true); else location.hash = "#stock"; });
