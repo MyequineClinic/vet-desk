@@ -1,7 +1,7 @@
 // My Equine Clinic – service worker
 // Network first: when online you always get the newest pages from GitHub;
 // the saved copy is used only when there is no connection.
-const CACHE = "vetdesk-v33";
+const CACHE = "vetdesk-v34";
 const CORE = ["./", "index.html", "horse-file.html", "manifest.json", "firebase-config.js"];
 
 self.addEventListener("install", e => {
@@ -22,4 +22,14 @@ self.addEventListener("fetch", e => {
       return res;
     }).catch(() => caches.match(req, {ignoreSearch: true}).then(r => r || caches.match("index.html")))
   );
+});
+
+// tap on a notification (e.g. feed & hay store low) → open or focus the site
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "./#feeding";
+  e.waitUntil(clients.matchAll({type: "window", includeUncontrolled: true}).then(list => {
+    for (const c of list) { if ("focus" in c) { c.navigate && c.navigate(url).catch(() => {}); return c.focus(); } }
+    return clients.openWindow ? clients.openWindow(url) : null;
+  }));
 });
