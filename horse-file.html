@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Examination Sheet and Records / ورقة الفحص والسجلات</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1f3864">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Equine Clinic">
 <style>
   :root{--red:#C8102E;--green:#007A3D;--line:#9a9a9a;--lab:#f2f2f2;--inp:#fff9db;}
   *{box-sizing:border-box}
@@ -467,7 +474,11 @@ function assemble(h, visits, prev, recs=[]){
   const put=(k,v)=>{ if((f[k]===undefined||f[k]==="")&&v!==undefined&&v!==null&&v!=="") f[k]=v; };
   const vs=visits.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.createdAt||"").localeCompare(a.createdAt||""));
   const last=vs[0]||{};
-  put("patientId",h.pid); put("name",h.name||last.name); put("nameEn",h.nameEn);
+  put("patientId",h.pid||last.pid); put("name",h.name||last.name); put("nameEn",h.nameEn);
+  // from Horses Data: height (cm → hands), body condition score, hoof & shoeing notes
+  { const cm=Number(h.heightCm); if(cm>0){ const inch=cm/2.54; let hh=Math.floor(inch/4), r=Math.round(inch-hh*4); if(r===4){hh++;r=0;} put("heightHands",hh+"."+r); } }
+  if(h.bcs!==undefined&&h.bcs!==null&&h.bcs!=="") put("bcs",String(h.bcs));
+  put("preShoeNotes",h.hoofShoeing);
   put("birthYear",h.birthYear||yearOf(h.birth)||yearOf(last.birth)); put("sex",h.sex||last.sex); put("breed",h.breed||last.breed);
   for(const k of ["color","microchip","militaryNo","rider","source","category","listNotes"]) put(k,h[k]);
   if(f.birthYear) put("age",new Date().getFullYear()-Number(f.birthYear)); else if(last.age) put("age",last.age);
@@ -616,10 +627,11 @@ function applyData(f,mode){
 /* ---------- find a horse by ID / name and offer to import ---------- */
 function matchHorses(list,q){
   q=hk(q); if(!q) return [];
-  const exact=list.filter(h=>[h.pid,h.name,h.nameEn,`${h.name} / ${h.nameEn}`].some(x=>hk(x)===q));
+  const al=h=>Array.isArray(h.aliases)?h.aliases:[];
+  const exact=list.filter(h=>[h.pid,h.name,h.nameEn,`${h.name} / ${h.nameEn}`,...al(h)].some(x=>hk(x)===q));
   if(exact.length) return exact;
   const byNo=list.filter(h=>hk(h.listNo)===q); if(byNo.length) return byNo;
-  return list.filter(h=>[h.pid,h.name,h.nameEn].some(x=>hk(x).includes(q))).slice(0,15);
+  return list.filter(h=>[h.pid,h.name,h.nameEn,...al(h)].some(x=>hk(x).includes(q))).slice(0,15);
 }
 async function gather(h){
   const [vs,pv]=ONLINE? await Promise.all([store.forHorse(SETTINGS.visits,h),store.forHorse(SETTINGS.preventive,h)]) : [[],[]];
@@ -667,7 +679,9 @@ async function offer(h, box=$("#openRes")){
   ];
   const PV=[["Patient ID / رقم المريض",f.patientId],["Horse Name / اسم الحصان",f.name],["Name (English) / الاسم بالإنجليزية",f.nameEn],["Sex – Type / الجنس",f.sex],["Breed / السلالة",f.breed],
     ["Birth Year / مواليد",f.birthYear],["Age / العمر",f.age!==undefined&&f.age!==""?f.age+" y":""],["Body weight / الوزن",w?`${w.kg} kg`:""],["Purpose / مهن الاستخدام",f.purpose],["Category / الفئة",f.category],
-    ["Source / المصدر",f.source],["Color / اللون",f.color],["Rider / الفارس",f.rider],["Microchip / الشريحة",f.microchip],["Military No. / الرقم العسكري",f.militaryNo]].filter(r=>r[1]!==undefined&&r[1]!==null&&String(r[1]).trim()!=="");
+    ["Source / المصدر",f.source],["Color / اللون",f.color],["Rider / الفارس",f.rider],["Microchip / الشريحة",f.microchip],["Military No. / الرقم العسكري",f.militaryNo],
+    ["Height (hand) / الطول",f.heightHands],["BCS / حالة الجسم",f.bcs],["Hoof and shoeing / الحوافر والتحذية",h.hoofShoeing],["Sire / الأب",h.sire],["Dam / الأم",h.dam],
+    ["Status of horse / حالة الحصان",h.hstatus],["Working status / حالة العمل",h.workStatus]].filter(r=>r[1]!==undefined&&r[1]!==null&&String(r[1]).trim()!=="");
   box.innerHTML=`<div class="found"><div class="bi"><b>Found / تم العثور: ${escT(h.nameEn||h.name||h.pid)}${h.pid?" · ID "+escT(h.pid):""}</b><b class="ar">${escT(h.name||"")}</b></div>
     ${PV.length?`<div class="hint" style="padding:6px 0 0"><b>Basic info available / البيانات الأساسية المتوفرة</b></div><table class="av">${PV.map(r=>`<tr><td>${escT(r[0])}</td><td>${escT(r[1])}</td></tr>`).join("")}</table>`:""}
     <div class="hint" style="padding:6px 0 0"><b>Records on the site / السجلات في الموقع</b></div>
