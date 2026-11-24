@@ -137,7 +137,7 @@
   <h3>Download report – all horses / تحميل تقرير لجميع الخيول</h3>
   <label><input type="radio" name="rep" value="vacc" checked> Vaccinations & Deworming / التطعيمات والديدان</label>
   <label><input type="radio" name="rep" value="weight"> Body Weight / وزن الجسم</label>
-  <label><input type="radio" name="rep" value="shoe"> Shoeing / التحذية</label>
+  <label><input type="radio" name="rep" value="shoe"> Shoeing and Trimming / التحذية والتقليم</label>
   <label><input type="radio" name="rep" value="vitals"> Vital Signs / العلامات الحيوية</label>
   <label><input type="radio" name="rep" value="injury"> Diseases & Injuries / الأمراض والإصابات</label>
   <label><input type="radio" name="rep" value="reco"> Recommendations & Review / التوصيات والمراجعة</label>
@@ -216,14 +216,13 @@
         <div class="f"><label>Estimated (lbs) / <span class="ar">تقديري رطل</span></label><input class="out" id="estLb" readonly></div>
         <div class="f"><label>Estimated (kg) / <span class="ar">تقديري كغ</span></label><input class="out" id="estKg" readonly></div>
       </div>
-      <div class="formula">
+      <div class="formula" style="display:none">
         (<span id="fxL">L</span> × <span id="fxG">G</span> × <span id="fxG2">G</span>) inch ÷
-        <input type="number" data-k="divisor" id="div" value="300" title="Editable / قابل للتعديل"> =
+        <input type="number" data-k="divisor" id="div" value="330" title="Editable / قابل للتعديل"> =
         <span id="fxLb">lbs</span> lbs ÷
         <input type="number" step="0.01" data-k="lbPerKg" id="kf" value="2.2" title="Editable / قابل للتعديل"> =
         <span id="fxKg">kg</span> kg
       </div>
-      <div class="hint" style="padding:0">The two boxes in the formula (300 and 2.2) can be edited. / الرقمان في المعادلة قابلان للتعديل</div>
     </div>
     <div class="grid" style="margin-top:8px">
       <div class="f"><label>Manual Weight (kg) – if no tape / <span class="ar">وزن يدوي</span></label><input type="number" data-k="manualKg" id="manKg"></div>
@@ -235,13 +234,12 @@
     </div>
   </section>
 
-  <section class="r"><h2>C. Shoeing Date / تاريخ التحذية</h2>
+  <section class="r"><h2>C. Shoeing and Trimming / التحذية والتقليم</h2>
     <div class="grid">
-      <div class="f"><label>Last Shoeing Date / <span class="ar">تاريخ آخر تحذية</span></label><input type="date" data-k="lastShoeing" id="shoeDate"></div>
+      <div class="f"><label>Date of Shoeing / <span class="ar">تاريخ التحذية</span></label><input type="date" data-k="lastShoeing" id="shoeDate"></div>
       <div class="f"><label>Shoe Type / <span class="ar">نوع التحذية</span></label><select data-k="shoeType"><option></option><option>Full / كامل</option><option>Front / أمامي</option><option>Hind / خلفي</option></select></div>
       <div class="f"><label>Shoeing / <span class="ar">التحذية</span></label><select data-k="shoeing"><option></option><option>Regular / عادي</option><option>Therapeutic / طبي</option></select></div>
-      <div class="f"><label>Days since shoeing / <span class="ar">أيام منذ التحذية</span></label><input class="out" id="shoeDays" readonly></div>
-      <div class="f"><label>Type of Horseshoes / <span class="ar">نوع الحدوات</span></label><select data-k="horseshoe"><option></option><option>Standard / عادية</option><option>Therapeutic / حدوة طبية</option><option>Clips / مشبك</option><option>Other / أخرى</option></select></div>
+      <div class="f"><label>Days since shoeing (auto) / <span class="ar">أيام منذ التحذية (تلقائي)</span></label><input class="out" id="shoeDays" readonly></div>
       <div class="f"><label>Hoof Condition / <span class="ar">حالة الحوافر</span></label><select data-k="hoof"><option></option><option>Good / جيدة</option><option>Fair / مقبولة</option><option>Needs Follow-up / تحتاج متابعة</option></select></div>
       <div class="f span2"><label>Pre-shoeing Notes / <span class="ar">ملاحظات قبل التحذية</span></label><input data-k="preShoeNotes"></div>
     </div>
@@ -255,6 +253,7 @@
       <div class="f"><label>Mucous Membranes / <span class="ar">الأغشية</span></label><select data-k="mm"><option></option><option>Pink / وردية</option><option>Pale / شاحبة</option><option>Cyanotic / مزرقة</option></select></div>
       <div class="f"><label>Behavior / <span class="ar">السلوك</span></label><select data-k="behavior"><option></option><option>Normal / طبيعي</option><option>Lethargic / خامل</option></select></div>
       <div class="f"><label>Appetite / <span class="ar">الشهية</span></label><select data-k="appetite"><option></option><option>Normal / طبيعي</option><option>Reduced / خفيف</option><option>Absent / معدوم</option></select></div>
+      <div class="f span2"><label>Teeth / <span class="ar">الأسنان</span></label><input data-k="teeth"></div>
       <div class="f span2"><label>Vitals check / <span class="ar">فحص العلامات</span></label><input class="out" id="vitalChk" readonly></div>
     </div>
   </section>
@@ -361,8 +360,8 @@ function calcWeight(){
 ["#lenIn","#girIn","#div","#kf","#manKg"].forEach(id=>$(id).addEventListener("input",calcWeight));
 
 /* ---------- shoeing days & vitals ---------- */
-function calcShoe(){ const d=$("#shoeDate").value; $("#shoeDays").value = d? Math.floor((Date.now()-new Date(d))/864e5) : ""; }
-$("#shoeDate").addEventListener("input",calcShoe);
+function calcShoe(){ const d=$("#shoeDate").value; if(!d){ $("#shoeDays").value=""; return; } const t=new Date(); t.setHours(0,0,0,0); const n=Math.round((t-new Date(d+"T00:00:00"))/864e5); $("#shoeDays").value = n<0 ? "" : n; }
+$("#shoeDate").addEventListener("input",calcShoe); $("#shoeDate").addEventListener("change",calcShoe);
 $("#bYear").addEventListener("input",()=>{ const y=+$("#bYear").value; if(y>1900) $("#age").value=new Date().getFullYear()-y; });
 function calcVitals(){
   let any=false, bad=false;
@@ -393,7 +392,7 @@ function setForm(d={}){
 }
 $("#btnClear").onclick=()=>{ if(!confirm("Clear the form? / مسح النموذج؟"))return;
   document.querySelectorAll("[data-k],[data-v]").forEach(el=>{ if(!["div","kf"].includes(el.id)) el.value=""; });
-  $("#div").value=300; $("#kf").value=2.2; $("#fileDate").value=today(); window._siteRec=null; CUR=null; LOADED=null; LAST_F=null; LAST_H=null; $("#openRes").innerHTML=""; $("#idOffer").innerHTML=""; OFFER_FOR=""; $("#saveInfo").textContent=""; resetTreat(); vetDefault(); calcWeight(); calcShoe(); calcVitals(); };
+  $("#div").value=330; $("#kf").value=2.2; $("#fileDate").value=today(); window._siteRec=null; CUR=null; LOADED=null; LAST_F=null; LAST_H=null; $("#openRes").innerHTML=""; $("#idOffer").innerHTML=""; OFFER_FOR=""; $("#saveInfo").textContent=""; resetTreat(); vetDefault(); calcWeight(); calcShoe(); calcVitals(); };
 
 /* ---------- DATA: your site's Firebase (same login), or this browser only ---------- */
 let db=null, ONLINE=false;
@@ -443,6 +442,17 @@ const store={
   }
 };
 
+/* same dropdown choices as Horses Data: add every value already used in Horses Data (and the site's breed list) to the Exam Sheet lists */
+async function syncLists(L){
+  try{
+    let siteBreeds=[]; if(ONLINE&&db){ try{ const d=await db.doc("config/lists").get(); siteBreeds=((d.exists&&d.data())||{}).breeds||[]; }catch(e){} }
+    const add=(id,vals)=>{ let dl=document.getElementById(id); if(!dl){ dl=document.createElement("datalist"); dl.id=id; document.body.appendChild(dl); }
+      const have=new Set([...dl.options].map(o=>o.value)); [...new Set(vals.filter(Boolean).map(v=>String(v).trim()))].forEach(v=>{ if(!have.has(v)){ const o=document.createElement("option"); o.value=v; dl.appendChild(o); have.add(v); } }); };
+    add("sexList",L.map(h=>h.sex)); add("breedList",[...siteBreeds,...L.map(h=>h.breed)]); add("srcList",L.map(h=>h.source)); add("catList",L.map(h=>h.category));
+    add("colorList",L.map(h=>h.color)); add("riderList",L.map(h=>h.rider)); add("teethList",L.map(h=>h.teeth));
+    [["color","colorList"],["rider","riderList"],["teeth","teethList"]].forEach(([k,id])=>{ const el=document.querySelector(`[data-k="${k}"]`); if(el&&!el.getAttribute("list")) el.setAttribute("list",id); });
+  }catch(e){}
+}
 /* horses = imported list + every horse that has a saved prescription */
 async function horseIndex(visits){
   const list=(await store.horses()).map(e=>({key:e.key,...e.data,pid:e.data.pid||"",name:e.data.name||""}));
@@ -459,6 +469,7 @@ async function refreshPicker(){
     const u=a=>[...new Set(a.filter(Boolean).map(String))];
     $("#hfIdList").innerHTML=u(L.map(h=>h.pid)).map(id=>{ const h=L.find(x=>String(x.pid)===id); return `<option value="${esc(id)}">${esc([h.name,h.nameEn].filter(Boolean).join(" – "))}</option>`; }).join("");
     $("#hfEnList").innerHTML=u(L.map(h=>h.nameEn)).map(n=>{ const h=L.find(x=>x.nameEn===n); return `<option value="${esc(n)}">${esc([h.pid,h.name].filter(Boolean).join(" – "))}</option>`; }).join("");
+    syncLists(L);
     IDX=null;
     if(L.length) status(`${ONLINE?"Signed in":"Browser mode"} – ${L.length} horses / خيل`);
   }catch(e){ console.error(e); }
@@ -478,7 +489,9 @@ function assemble(h, visits, prev, recs=[]){
   // from Horses Data: height (cm → hands), body condition score, hoof & shoeing notes
   { const cm=Number(h.heightCm); if(cm>0){ const inch=cm/2.54; let hh=Math.floor(inch/4), r=Math.round(inch-hh*4); if(r===4){hh++;r=0;} put("heightHands",hh+"."+r); } }
   if(h.bcs!==undefined&&h.bcs!==null&&h.bcs!=="") put("bcs",String(h.bcs));
-  put("preShoeNotes",h.hoofShoeing);
+  put("lastShoeing",h.shoeDate); put("teeth",h.teeth);
+  if(h.shoeType){ const t=/therap/i.test(h.shoeType)?"Therapeutic / طبي":/regular/i.test(h.shoeType)?"Regular / عادي":""; if(t) put("shoeing",t); }
+  put("preShoeNotes",[h.hoofShoeing,h.limb&&"Limb: "+h.limb,h.shoeType&&"Shoeing: "+h.shoeType,h.shoeDate&&"Shod: "+h.shoeDate,h.trimming&&"Trimming: "+h.trimming].filter(Boolean).join(" · "));
   put("birthYear",h.birthYear||yearOf(h.birth)||yearOf(last.birth)); put("sex",h.sex||last.sex); put("breed",h.breed||last.breed);
   for(const k of ["color","microchip","militaryNo","rider","source","category","listNotes"]) put(k,h[k]);
   if(f.birthYear) put("age",new Date().getFullYear()-Number(f.birthYear)); else if(last.age) put("age",last.age);
@@ -607,7 +620,7 @@ function formHasData(h){ // h given → the ID / name you just typed for that ho
 }
 function clearForm(){
   document.querySelectorAll("[data-k],[data-v]").forEach(el=>{ if(!["div","kf"].includes(el.id)) el.value=""; });
-  $("#div").value=300; $("#kf").value=2.2; resetTreat(); window._siteRec=null;
+  $("#div").value=330; $("#kf").value=2.2; resetTreat(); window._siteRec=null;
 }
 function applyData(f,mode){
   if(mode==="all"){ clearForm(); setForm(f); }
@@ -680,8 +693,8 @@ async function offer(h, box=$("#openRes")){
   const PV=[["Patient ID / رقم المريض",f.patientId],["Horse Name / اسم الحصان",f.name],["Name (English) / الاسم بالإنجليزية",f.nameEn],["Sex – Type / الجنس",f.sex],["Breed / السلالة",f.breed],
     ["Birth Year / مواليد",f.birthYear],["Age / العمر",f.age!==undefined&&f.age!==""?f.age+" y":""],["Body weight / الوزن",w?`${w.kg} kg`:""],["Purpose / مهن الاستخدام",f.purpose],["Category / الفئة",f.category],
     ["Source / المصدر",f.source],["Color / اللون",f.color],["Rider / الفارس",f.rider],["Microchip / الشريحة",f.microchip],["Military No. / الرقم العسكري",f.militaryNo],
-    ["Height (hand) / الطول",f.heightHands],["BCS / حالة الجسم",f.bcs],["Hoof and shoeing / الحوافر والتحذية",h.hoofShoeing],["Sire / الأب",h.sire],["Dam / الأم",h.dam],
-    ["Working status / حالة العمل",h.workStatus]].filter(r=>r[1]!==undefined&&r[1]!==null&&String(r[1]).trim()!=="");
+    ["Height (hand) / الطول",f.heightHands],["BCS / حالة الجسم",f.bcs],["Teeth / الأسنان",h.teeth],["Hoof condition / حالة الحافر",h.hoofShoeing],["Limb / الطرف",h.limb],["Shoeing type / نوع التحذية",h.shoeType],["Date of shoeing / تاريخ التحذية",h.shoeDate?h.shoeDate.split("-").reverse().join("/"):""],["Trimming / التقليم",h.trimming],["Sire / الأب",h.sire],["Dam / الأم",h.dam],
+    ["Job Status / حالة العمل",h.workStatus],["Syce Name / اسم السايس",h.syce]].filter(r=>r[1]!==undefined&&r[1]!==null&&String(r[1]).trim()!=="");
   box.innerHTML=`<div class="found"><div class="bi"><b>Found / تم العثور: ${escT(h.nameEn||h.name||h.pid)}${h.pid?" · ID "+escT(h.pid):""}</b><b class="ar">${escT(h.name||"")}</b></div>
     ${PV.length?`<div class="hint" style="padding:6px 0 0"><b>Basic info available / البيانات الأساسية المتوفرة</b></div><table class="av">${PV.map(r=>`<tr><td>${escT(r[0])}</td><td>${escT(r[1])}</td></tr>`).join("")}</table>`:""}
     <div class="hint" style="padding:6px 0 0"><b>Records on the site / السجلات في الموقع</b></div>
@@ -738,7 +751,7 @@ async function saveFile(kind){ // "draft" | "final"
       status("Draft saved / تم حفظ المسودة");
     } else {
       const fields={file:d,updatedAt:now};
-      for(const k of ["name","nameEn","sex","breed","birthYear","source","category","listNotes","color","microchip","militaryNo","rider"]) if(d[k]) fields[k]=d[k];
+      for(const k of ["name","nameEn","sex","breed","birthYear","source","category","listNotes","color","microchip","militaryNo","rider","teeth"]) if(d[k]) fields[k]=d[k];
       if(d.patientId) fields.pid=d.patientId;
       if(d.weightKg){ fields.weightKg=Number(d.weightKg); fields.weightDate=d.weightDate||today(); fields.weightMethod=d.manualKg?"manual":"tape formula"; }
       await store.saveHorse(key,fields);           // latest file + weight shared with prescriptions
@@ -976,7 +989,7 @@ async function collectAll(){
   const out=L.map(h=>{ const m=assemble(h,visits.filter(v=>isHorse(v,h)),prev.filter(p=>isHorse(p,h)));
     if(m._weight){ m.weightKg=m.weightKg||m._weight.kg; if(!m.manualKg&&!(m.lengthIn&&m.girthIn)) m.manualKg=m._weight.kg; }
     if(m.manualKg&&!m.weightKg) m.weightKg=m.manualKg;
-    if(m.lengthIn&&m.girthIn&&!m.estimatedKg){ const lb=m.lengthIn*m.girthIn*m.girthIn/(+m.divisor||300); m.estimatedKg=Math.round(lb/(+m.lbPerKg||2.2)); if(!m.manualKg) m.weightKg=m.estimatedKg; }
+    if(m.lengthIn&&m.girthIn&&!m.estimatedKg){ const lb=m.lengthIn*m.girthIn*m.girthIn/(+m.divisor||330); m.estimatedKg=Math.round(lb/(+m.lbPerKg||2.2)); if(!m.manualKg) m.weightKg=m.estimatedKg; }
     m._hasFile=!!h.file; return m; });
   const n=x=>{const v=parseFloat(x.listNo||x.patientId); return isNaN(v)?Infinity:v;};
   return out.sort((a,b)=>n(a)-n(b)||String(a.name||"").localeCompare(String(b.name||"")));
@@ -996,14 +1009,14 @@ function buildReport(type,H){
   else if(type==="weight"){ title="All Horses – Body Weight / أوزان جميع الخيول";
     head.push("Body Length (inch) / طول الجسم","Heart Girth (inch) / محيط الصدر","Formula Weight (kg) / وزن المعادلة","Manual Weight (kg) / وزن يدوي","Weight used for Rx (kg) / الوزن المعتمد","Method / الطريقة","Last Weight Date / تاريخ آخر وزن","BCS (1-9) / حالة الجسم");
     rows=H.map(h=>[...idv(h),v(h.lengthIn),v(h.girthIn),v(h.estimatedKg),v(h.manualKg),v(h.weightKg),h.weightKg?(h.manualKg?"Manual / يدوي":"Formula / معادلة"):NA,v(h.weightDate),v(h.bcs)]); }
-  else if(type==="shoe"){ title="All Horses – Shoeing / تحذية جميع الخيول";
-    head.push("Last Shoeing Date / تاريخ آخر تحذية","Days since / أيام منذ","Shoe Type / نوع التحذية","Shoeing / التحذية","Horseshoes / الحدوات","Hoof Condition / حالة الحوافر","Pre-shoeing Notes / ملاحظات");
-    rows=H.map(h=>[...idv(h),v(h.lastShoeing),h.lastShoeing?days(h.lastShoeing):NA,v(h.shoeType),v(h.shoeing),v(h.horseshoe),v(h.hoof),v(h.preShoeNotes)]); }
+  else if(type==="shoe"){ title="All Horses – Shoeing and Trimming / تحذية وتقليم جميع الخيول";
+    head.push("Last Shoeing Date / تاريخ آخر تحذية","Days since / أيام منذ","Shoe Type / نوع التحذية","Shoeing / التحذية","Hoof Condition / حالة الحوافر","Pre-shoeing Notes / ملاحظات");
+    rows=H.map(h=>[...idv(h),v(h.lastShoeing),h.lastShoeing?days(h.lastShoeing):NA,v(h.shoeType),v(h.shoeing),v(h.hoof),v(h.preShoeNotes)]); }
   else if(type==="vitals"){ title="All Horses – Vital Signs / العلامات الحيوية لجميع الخيول";
     const chk=h=>{const t=+h.temp,p=+h.pulse,r=+h.resp; if(!h.temp&&!h.pulse&&!h.resp) return NA;
       return ((h.temp&&(t<37.5||t>38.5))||(h.pulse&&(p<28||p>44))||(h.resp&&(r<8||r>16)))?"Check / راجع":"Normal / طبيعي";};
-    head.push("Temperature °C / الحرارة","Pulse bpm / النبض","Respiration rpm / التنفس","Mucous Membranes / الأغشية","Behavior / السلوك","Appetite / الشهية","Vitals check / فحص","File Date / تاريخ الملف");
-    rows=H.map(h=>[...idv(h),v(h.temp),v(h.pulse),v(h.resp),v(h.mm),v(h.behavior),v(h.appetite),chk(h),v(h.fileDate)]); }
+    head.push("Temperature °C / الحرارة","Pulse bpm / النبض","Respiration rpm / التنفس","Mucous Membranes / الأغشية","Behavior / السلوك","Appetite / الشهية","Teeth / الأسنان","Vitals check / فحص","File Date / تاريخ الملف");
+    rows=H.map(h=>[...idv(h),v(h.temp),v(h.pulse),v(h.resp),v(h.mm),v(h.behavior),v(h.appetite),v(h.teeth),chk(h),v(h.fileDate)]); }
   else if(type==="injury"){ title="All Horses – Diseases & Injuries / الأمراض والإصابات لجميع الخيول";
     const ks=["prevDis","prevDisDetails","prevInj","prevInjDetails","curInj","injType","injLoc","injSev"];
     head.push(...ks.map(lbl)); rows=H.map(h=>[...idv(h),...ks.map(k=>v(h[k]))]); }
