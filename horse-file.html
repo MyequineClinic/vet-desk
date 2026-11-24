@@ -241,6 +241,8 @@
       <div class="f"><label>Shoeing / <span class="ar">التحذية</span></label><select data-k="shoeing"><option></option><option>Regular / عادي</option><option>Therapeutic / طبي</option></select></div>
       <div class="f"><label>Days since shoeing (auto) / <span class="ar">أيام منذ التحذية (تلقائي)</span></label><input class="out" id="shoeDays" readonly></div>
       <div class="f"><label>Hoof Condition / <span class="ar">حالة الحوافر</span></label><select data-k="hoof"><option></option><option>Good / جيدة</option><option>Fair / مقبولة</option><option>Needs Follow-up / تحتاج متابعة</option></select></div>
+      <div class="f"><label>Limb / <span class="ar">الطرف</span></label><input data-k="limb"></div>
+      <div class="f span2"><label>Trimming of hoof / sole / frog (which leg) / <span class="ar">تقليم الحافر / النعل / الضفدع (أي رجل)</span></label><input data-k="trimming"></div>
       <div class="f span2"><label>Pre-shoeing Notes / <span class="ar">ملاحظات قبل التحذية</span></label><input data-k="preShoeNotes"></div>
     </div>
   </section>
@@ -489,9 +491,9 @@ function assemble(h, visits, prev, recs=[]){
   // from Horses Data: height (cm → hands), body condition score, hoof & shoeing notes
   { const cm=Number(h.heightCm); if(cm>0){ const inch=cm/2.54; let hh=Math.floor(inch/4), r=Math.round(inch-hh*4); if(r===4){hh++;r=0;} put("heightHands",hh+"."+r); } }
   if(h.bcs!==undefined&&h.bcs!==null&&h.bcs!=="") put("bcs",String(h.bcs));
-  put("lastShoeing",h.shoeDate); put("teeth",h.teeth);
+  put("lastShoeing",h.shoeDate); put("teeth",h.teeth); put("limb",h.limb); put("trimming",h.trimming);
   if(h.shoeType){ const t=/therap/i.test(h.shoeType)?"Therapeutic / طبي":/regular/i.test(h.shoeType)?"Regular / عادي":""; if(t) put("shoeing",t); }
-  put("preShoeNotes",[h.hoofShoeing,h.limb&&"Limb: "+h.limb,h.shoeType&&"Shoeing: "+h.shoeType,h.shoeDate&&"Shod: "+h.shoeDate,h.trimming&&"Trimming: "+h.trimming].filter(Boolean).join(" · "));
+  put("preShoeNotes",[h.hoofShoeing,h.shoeType&&"Shoeing: "+h.shoeType].filter(Boolean).join(" · "));
   put("birthYear",h.birthYear||yearOf(h.birth)||yearOf(last.birth)); put("sex",h.sex||last.sex); put("breed",h.breed||last.breed);
   for(const k of ["color","microchip","militaryNo","rider","source","category","listNotes"]) put(k,h[k]);
   if(f.birthYear) put("age",new Date().getFullYear()-Number(f.birthYear)); else if(last.age) put("age",last.age);
@@ -751,7 +753,8 @@ async function saveFile(kind){ // "draft" | "final"
       status("Draft saved / تم حفظ المسودة");
     } else {
       const fields={file:d,updatedAt:now};
-      for(const k of ["name","nameEn","sex","breed","birthYear","source","category","listNotes","color","microchip","militaryNo","rider","teeth"]) if(d[k]) fields[k]=d[k];
+      for(const k of ["name","nameEn","sex","breed","birthYear","source","category","listNotes","color","microchip","militaryNo","rider","teeth","limb","trimming"]) if(d[k]) fields[k]=d[k];
+      if(d.lastShoeing) fields.shoeDate=d.lastShoeing;
       if(d.patientId) fields.pid=d.patientId;
       if(d.weightKg){ fields.weightKg=Number(d.weightKg); fields.weightDate=d.weightDate||today(); fields.weightMethod=d.manualKg?"manual":"tape formula"; }
       await store.saveHorse(key,fields);           // latest file + weight shared with prescriptions
@@ -1010,8 +1013,8 @@ function buildReport(type,H){
     head.push("Body Length (inch) / طول الجسم","Heart Girth (inch) / محيط الصدر","Formula Weight (kg) / وزن المعادلة","Manual Weight (kg) / وزن يدوي","Weight used for Rx (kg) / الوزن المعتمد","Method / الطريقة","Last Weight Date / تاريخ آخر وزن","BCS (1-9) / حالة الجسم");
     rows=H.map(h=>[...idv(h),v(h.lengthIn),v(h.girthIn),v(h.estimatedKg),v(h.manualKg),v(h.weightKg),h.weightKg?(h.manualKg?"Manual / يدوي":"Formula / معادلة"):NA,v(h.weightDate),v(h.bcs)]); }
   else if(type==="shoe"){ title="All Horses – Shoeing and Trimming / تحذية وتقليم جميع الخيول";
-    head.push("Last Shoeing Date / تاريخ آخر تحذية","Days since / أيام منذ","Shoe Type / نوع التحذية","Shoeing / التحذية","Hoof Condition / حالة الحوافر","Pre-shoeing Notes / ملاحظات");
-    rows=H.map(h=>[...idv(h),v(h.lastShoeing),h.lastShoeing?days(h.lastShoeing):NA,v(h.shoeType),v(h.shoeing),v(h.hoof),v(h.preShoeNotes)]); }
+    head.push("Last Shoeing Date / تاريخ آخر تحذية","Days since / أيام منذ","Shoe Type / نوع التحذية","Shoeing / التحذية","Hoof Condition / حالة الحوافر","Limb / الطرف","Trimming / التقليم","Pre-shoeing Notes / ملاحظات");
+    rows=H.map(h=>[...idv(h),v(h.lastShoeing),h.lastShoeing?days(h.lastShoeing):NA,v(h.shoeType),v(h.shoeing),v(h.hoof),v(h.limb),v(h.trimming),v(h.preShoeNotes)]); }
   else if(type==="vitals"){ title="All Horses – Vital Signs / العلامات الحيوية لجميع الخيول";
     const chk=h=>{const t=+h.temp,p=+h.pulse,r=+h.resp; if(!h.temp&&!h.pulse&&!h.resp) return NA;
       return ((h.temp&&(t<37.5||t>38.5))||(h.pulse&&(p<28||p>44))||(h.resp&&(r<8||r>16)))?"Check / راجع":"Normal / طبيعي";};
