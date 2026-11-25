@@ -805,6 +805,69 @@ function fdInterp(pts, xk, yk, x){
 const fdDob = h => h.birth || (N(h.birthYear) ? h.birthYear + "-01-01" : "");
 const fdAgeM = dob => dob ? (new Date(today()) - new Date(dob)) / 864e5 / 30.4375 : null;
 const bcsRow = s => FCFG().bcs.find(b => +b.score === N(s)) || null;
+/* ---------- Standard body weight (age · height · breed) and Remarks on BWT ----------
+   Mature (adult) standard:
+   1. "Mature body weight" typed in Horses Data, or
+   2. University of Minnesota Extension ideal-weight equations (height + body length, inches → lbs) by breed type, or
+   3. height only: Agriculture Victoria Table 2 (weight by height in hands, moderate condition score 3 of 0–5).
+   Growing horse: mature height = height ÷ % mature height for age; standard = mature weight × % mature weight for age (Growth tables).
+   Remarks: actual within ±20 kg of standard = OK, above = Over wt, below = Under wt. */
+// output in the chosen language: English, Arabic, or English / Arabic
+const LMODE = () => (window.LANG && window.LANG.mode ? window.LANG.mode() : "en");
+const T2 = (en, ar) => { const m = LMODE(); return m === "ar" ? ar : m === "both" ? en + " / " + ar : en; };
+const T2N = (en, ar) => { const m = LMODE(); return m === "ar" ? ar : m === "both" ? en + " – " + ar : en; };
+const BWT_TOL = 20;
+const BWT_REMS = ["Over wt", "Under wt", "OK"];
+const BWT_HT_REF = [[12, 250], [13, 345], [14, 395], [15, 460], [16, 505]];
+const BWT_UMN = {Pony:[15.58, 23.52, 1333], Arabian:[15.58, 23.52, 1344], Stock:[15.58, 23.52, 1269], Warmblood:[27.55, 25.98, 2235], Draft:[27.55, 25.98, 2092], Thoroughbred:[23.75553796, 10.69073808, 1073.380132]};
+const BWT_REF_AR = "الوزن القياسي: معادلات الوزن المثالي من جامعة مينيسوتا (الارتفاع + طول الجسم حسب نوع السلالة)؛ بالارتفاع فقط ← جدول الوزن حسب الارتفاع من Agriculture Victoria (حالة جسم متوسطة)؛ الخيول النامية ← نسبة الارتفاع ونسبة الوزن البالغ حسب العمر (NRC 2007 / KER). ضمن ±20 كجم من القياسي = مناسب.";
+const BWT_REF_TXT = "Standard BWT: University of Minnesota Extension ideal-weight equations (height + body length, by breed type); height only → Agriculture Victoria weight-by-height table (moderate condition); growing horses → % mature height and % mature weight for age (NRC 2007 / KER). Within ±20 kg of standard = OK.";
+function bwtBreedType(breed){
+  const b = String(breed || "").toLowerCase();
+  if (/pony|shetland|falabella|miniature|caspian|بوني|قزم/.test(b)) return "Pony";
+  if (/thorough|ثورو/.test(b)) return "Thoroughbred";
+  if (/draft|draught|shire|clydes|percheron|suffolk|ardennes|brabant|boulonnais|breton|comtois|jutland|noriker/.test(b)) return "Draft";
+  if (/arab|عرب/.test(b) && !/anglo|morab/.test(b)) return "Arabian";
+  if (/quarter|paint|appaloosa|stock/.test(b)) return "Stock";
+  return "Warmblood";
+}
+const BWT_TYPE_NAME = {Pony:"Pony", Arabian:"Arabian", Stock:"Stock horse", Warmblood:"Warmblood / light horse", Draft:"Draft", Thoroughbred:"Thoroughbred"};
+function bwtLin(t, x){ let i = 0; while (i < t.length - 2 && x > t[i + 1][0]) i++; const a = t[i], b = t[i + 1]; return a[1] + (x - a[0]) * (b[1] - a[1]) / (b[0] - a[0]); }
+// o = {dob, heightCm, lengthIn, breed, matureBw}
+function bwtStd(o){
+  const C = FCFG(), ageM = fdAgeM(o.dob), type = bwtBreedType(o.breed), r = {ageM, type, std:null, mature:null, method:"", pct:null};
+  let H = N(o.heightCm) ? N(o.heightCm) / 2.54 : null, Lg = N(o.lengthIn), hf = 1;
+  if (H && ageM !== null && ageM < 48 && !N(o.matureBw)) { const p = fdInterp(C.ght, "age_months", "pct_mature_height", Math.max(ageM, 3)); if (p && p.y > 0 && p.y < 100) hf = p.y / 100; }
+  if (N(o.matureBw)) { r.mature = N(o.matureBw); r.method = T2("mature body weight typed in Horses Data", "وزن البلوغ المُدخل في بيانات الخيل"); }
+  else if (H && Lg) { const e = BWT_UMN[type]; r.mature = (e[0] * H / hf + e[1] * Lg / hf - e[2]) / 2.2046; r.method = T2("Univ. of Minnesota ideal weight – " + BWT_TYPE_NAME[type] + " (height + body length)", "الوزن المثالي (جامعة مينيسوتا) – " + BWT_TYPE_NAME[type] + " (الارتفاع + طول الجسم)"); }
+  else if (H) { const hh = H / hf / 4; r.mature = hh < 12 ? 250 * Math.pow(hh / 12, 3) : bwtLin(BWT_HT_REF, hh); r.method = T2("weight-by-height table (Agriculture Victoria)", "جدول الوزن حسب الارتفاع (Agriculture Victoria)"); }
+  if (!(r.mature > 0)) { r.mature = null; return r; }
+  if (hf < 1) r.method += T2(" – mature height estimated (" + Math.round(hf * 100) + "% grown)", " – الارتفاع عند البلوغ تقديري (نما " + Math.round(hf * 100) + "%)");
+  if (ageM === null) { r.std = r.mature; r.method += T2(" – no birth date, adult assumed", " – لا يوجد تاريخ ميلاد، اعتبر بالغاً"); return r; }
+  const gf = gbwFor(o.breed), g = fdInterp(gf.pts, "age_months", "pct_mature_BW", ageM); r.pct = g ? g.y : 100; r.std = r.mature * r.pct / 100; r.gref = gf.ref;
+  return r;
+}
+/* growth reference by breed (body weight by age → % of mature weight → standard for age, daily and monthly gain)
+   Thoroughbred: Kentucky Equine Research – Brown-Douglas & Pagan (2009), Kentucky Thoroughbreds, body weight 0–18 months;
+     reference mature weight = 18-month weight ÷ 0.80 (80% of mature weight at 18 months, NRC growth table).
+   Pony: MSD Veterinary Manual / NRC 2007 – ponies of 200 kg adult weight, body weight and daily gain 4–24 months.
+   Other breeds, and ages outside these tables: the growth table in Feeds, status & standards (NRC 2007 / KER). */
+const GROWTH_REF = {
+  Thoroughbred:{n:"Thoroughbred", src:"Kentucky Equine Research – Brown-Douglas & Pagan 2009 (Kentucky Thoroughbreds)", url:"https://ker.com/wp-content/uploads/Body-Weight-Wither-Height-and-Growth-Rates-in-Thoroughbreds-Raised-in-America-England-Australia-New-Zealand-and-India.pdf", mature:453.9 / 0.8,
+    pts:[[0, 67.5], [1, 99.3], [6, 250.7], [12, 353.3], [18, 453.9]], adg:null},
+  Pony:{n:"Pony", src:"MSD Veterinary Manual / NRC 2007 – ponies, 200 kg adult weight", url:"https://www.msdvetmanual.com/multimedia/table/estimated-daily-major-nutrient-requirements-of-growing-horses-and-ponies", mature:200,
+    pts:[[4, 67], [6, 86], [12, 128], [18, 155], [24, 172]], adg:{4:0.34, 6:0.29, 12:0.18, 18:0.11, 24:0.07}}};
+function gbwFor(breed){
+  const t = bwtBreedType(breed), G = GROWTH_REF[t], base = FCFG().gbw;
+  if (!G) return {pts:base, ref:null};
+  const first = G.pts[0][0], last = G.pts[G.pts.length - 1][0];
+  return {pts:[...base.filter(x => +x.age_months < first), ...G.pts.map(([a, w]) => ({age_months:a, pct_mature_BW:w / G.mature * 100})), ...base.filter(x => +x.age_months > last)], ref:G};
+}
+const growthStage = m => m === null || m === undefined ? null : m < 12 ? {k:"young", t:T2("Young (0–12 months) – follows the growth curve", "صغير (0–12 شهراً) – يتبع منحنى النمو")} : m < 60 ? {k:"growing", t:T2("Growing (1–5 years) – follows the growth curve", "نامٍ (1–5 سنوات) – يتبع منحنى النمو")} : {k:"adult", t:T2("Adult (5 years +) – no more growth; weight should stay at the standard (±" + BWT_TOL + " kg)", "بالغ (5 سنوات فأكثر) – لا نمو بعد ذلك؛ يبقى الوزن عند القياسي (±" + BWT_TOL + " كجم)")};
+const bwtMark = (bw, std) => { bw = N(bw); if (bw === null || !std) return ""; const d = bw - std; return d > BWT_TOL ? "Over wt" : d < -BWT_TOL ? "Under wt" : "OK"; };
+const horseBwt = h => { const s = bwtStd({dob:fdDob(h), heightCm:h.heightCm, lengthIn:h.lengthIn, breed:h.breed, matureBw:h.matureBw}); s.auto = bwtMark(h.weightKg, s.std); s.remark = h.bwtRemark || s.auto; return s; };
+const BWT_AR = {"Over wt":"وزن زائد", "Under wt":"وزن ناقص", "OK":"مناسب"};
+const bwtTxt = (bw, std) => { const m = bwtMark(bw, std); if (!m) return ""; const d = Math.round(N(bw) - std); return T2(m, BWT_AR[m]) + " (" + (d > 0 ? "+" : "") + d + T2(" kg)", " كجم)"); };
 // the feeding details of a horse (from Horses Data)
 // body weight, height, BCS, status – Horses Data first, then the latest Examination Sheet, then the latest prescription
 function fdSaved(h){
@@ -820,7 +883,7 @@ function fdSaved(h){
   const status = h.feedStatus || ""; if (status) src.status = "Horses Data";
   return {bw, bcs, status, height, src};
 }
-const fdInputs = h => { const v = fdSaved(h); return {bw:v.bw, bcs:v.bcs, status:v.status, height:v.height, matureBw:N(h.matureBw), dob:fdDob(h)}; };
+const fdInputs = h => { const v = fdSaved(h); return {bw:v.bw, bcs:v.bcs, status:v.status, height:v.height, matureBw:N(h.matureBw), dob:fdDob(h), breed:h.breed || "", lengthIn:N(h.lengthIn)}; };
 const FD_NOD = "data not saved or not given manually";
 const fdNoData = inp => [inp.bw === null || inp.bw === undefined ? "Body weight" : "", inp.height === null || inp.height === undefined ? "Height" : "", !inp.status ? "Feeding status" : ""].filter(Boolean);
 const fdConcs = plan => Array.isArray(plan.concs) && plan.concs.length ? plan.concs : (plan.conc2 ? [{name:plan.conc2, part:100}] : []);
@@ -863,7 +926,15 @@ function fdXPanel(R, P){
     const conc = R.tot.uDM ? t / R.tot.uDM : 0, over = conc > X.max * (X.f === 10 ? 1 : 1) + 1e-9, low = q !== null && t < q * mn - 1e-9;
     const chk = q === null ? "" : over ? `HIGH – above the safe upper limit ${X.maxT}` : low ? "LOW" : "OK";
     return `<tr><td><b>${esc(X.n)}</b></td><td class="num">${q === null ? "" : fdF(q, X.d) + " " + X.u}</td><td class="num">${fdF(fe, X.d)} ${X.u}</td><td>${sp && sp.used > 0 ? esc(sp.name) + " <b>" + fdF(sp.used * 1000, sp.used * 1000 < 10 ? 2 : 1) + " g</b>" : sp && !sp.name ? '<span class="fdred small">add the product to the feed library</span>' : "–"}</td><td class="num"><b>${fdF(t, X.d)} ${X.u}</b></td><td class="num">${q ? fdP(t / q, 0) : ""}</td><td${fdCls(chk === "OK" ? "OK" : chk)}>${esc(chk)}</td></tr>`; }).join("");
-  return `<div class="fdconcs" style="margin-top:10px"><div class="row"><b class="small">Extra supplements</b><span class="small muted">press to add – the amount covers what hay + feed leave short (NRC 2007)</span><span class="spacer"></span>${btns}</div>
+  const xc = Array.isArray(P.xc) ? P.xc : [], sl = feedsOf("Supplement");
+  const xcRows = xc.map((x, i) => { const lib = x.name ? feedRow(x.name) : null, it = R.supps.find(y => y.key === "xc" + i);
+    return `<div class="row fdcrow"><span class="small">${i + 1}.</span><input data-xcn="${i}" list="dl_fdsupp" value="${esc(x.name || "")}" placeholder="Supplement name (library or your own)" style="max-width:260px">
+      <label class="bdchk">g/day <input data-xcg="${i}" type="number" step="any" min="0" value="${esc(x.g ?? "")}" style="width:80px"></label>
+      <label class="bdchk">Ca % <input data-xcc="${i}" type="number" step="any" min="0" value="${esc(x.ca ?? "")}" placeholder="${lib ? esc(fdF(lib.ca, 2)) : ""}" style="width:70px"></label>
+      <label class="bdchk">P % <input data-xcp="${i}" type="number" step="any" min="0" value="${esc(x.p ?? "")}" placeholder="${lib ? esc(fdF(lib.p, 2)) : ""}" style="width:70px"></label>
+      <span class="small muted">${it ? "Ca " + fdF(it.ca, 1) + " g · P " + fdF(it.p, 1) + " g/day" : ""}${lib ? " · from feed library" : x.name ? " · your own product" : ""}</span><button class="small danger" data-xcd="${i}" title="Remove">✕</button></div>`; }).join("");
+  return `<div class="fdconcs" style="margin-top:10px"><div class="row"><b class="small">Extra supplements</b><span class="small muted">press to add – the amount covers what hay + feed leave short (NRC 2007)</span><span class="spacer"></span>${btns}<button class="small" data-xcadd="1">+ Add extra supplement</button></div>
+    ${xc.length ? `<datalist id="dl_fdsupp">${sl.map(x => `<option>${esc(x)}</option>`).join("")}</datalist>${xcRows}<p class="small muted" style="margin:4px 0 0">Your own supplement: type the name, the amount per day and its Ca % and P % from the label (as fed). A library name fills Ca and P by itself – type to replace. Its Ca and P are added to the totals and the comparison.</p>` : ""}
     ${on.length ? `<div class="tbl" style="margin-top:6px"><table class="fdtab"><thead><tr><th>Nutrient</th><th class="num">Required / day</th><th class="num">From hay + feed</th><th>Supplement / day</th><th class="num">Total</th><th class="num">% of requirement</th><th>Check</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="small muted" style="margin:4px 0 0">Feed values are typical figures (Bait Al-Inmaa from its bag label) – put your own analysis in <b>Feeds, status &amp; standards</b> (columns Vit E, Se, Mg, K). Products: ${on.map(k => { const p = suppById(FD_X[k].supp); return p ? esc(p.feed) : esc(FD_X[k].n) + " – not in library"; }).join(" · ")}. Selenium is toxic above ${FD_X.se.maxT} of the diet – do not add if the feed already covers it.</p>` : ""}</div>`;
 }
@@ -1333,11 +1404,14 @@ function fdChartData(){
 }
 const fdChVals = (R, dm) => dm ? [R.stdc.minHayDM, R.stdc.hayDM, R.stdc.minConcDM, R.stdc.concDM] : [R.stdc.minHayAF, R.stdc.hayAF, R.stdc.minConcAF, R.stdc.concAF];
 const FD_CHS = [["Hay – minimum","hay",0],["Hay – standard","hay",1],["Feed – minimum","feed",0],["Feed – standard","feed",1]];
-const fdChLegend = print => `<div class="fdlg">${FD_CHS.map(([l, c, s]) => { const col = print ? (c === "hay" ? "#008300" : "#2a78d6") : `var(--fd${c})`; return `<span><i style="${s ? `background:${col}` : `background:color-mix(in srgb, ${col} 25%, transparent);border:1.5px solid ${col}`}"></i>${esc(l)}</span>`; }).join("")}</div>`;
+// ongoing (what the horse eats now) – blank when there is no data
+const FD_CHO = [["Hay – ongoing","hay"],["Feed – ongoing","feed"]];
+const fdChOng = (r, dm) => { if (!("ong" in r)) r.ong = fdOngoing(r.h); const o = r.ong; return o ? (dm ? [o.hayDM, o.feedDM] : [o.hayKg, o.feedKg]) : [null, null]; };
+const fdChLegend = print => `<div class="fdlg">${FD_CHS.map(([l, c, s]) => { const col = print ? (c === "hay" ? "#008300" : "#2a78d6") : `var(--fd${c})`; return `<span><i style="${s ? `background:${col}` : `background:color-mix(in srgb, ${col} 25%, transparent);border:1.5px solid ${col}`}"></i>${esc(l)}</span>`; }).join("")}${FD_CHO.map(([l, c]) => { const col = print ? (c === "hay" ? "#008300" : "#2a78d6") : `var(--fd${c})`; return `<span><i style="background:transparent;border:1.5px dashed ${col}"></i>${esc(l)}</span>`; }).join("")}</div>`;
 function fdChartSvg(rows, dm, print){
   const col = {hay:print ? "#008300" : "var(--fdhay)", feed:print ? "#2a78d6" : "var(--fdfeed)"}, ink = print ? "#555" : "var(--muted)", line = print ? "#ddd" : "var(--line)", txt = print ? "#111" : "var(--ink)";
-  const W = 960, LW = 240, RW = 44, bh = 10, gap = 2, band = 4 * bh + 3 * gap + 20, top = 24, H = top + rows.length * band + 4;
-  const max = Math.max(0.5, ...rows.flatMap(r => fdChVals(r.R, dm).map(v => v || 0)));
+  const W = 960, LW = 240, RW = 44, bh = 10, gap = 2, band = 6 * bh + 5 * gap + 20, top = 24, H = top + rows.length * band + 4;
+  const max = Math.max(0.5, ...rows.flatMap(r => [...fdChVals(r.R, dm), ...fdChOng(r, dm)].map(v => v || 0)));
   const step = [0.25, 0.5, 1, 2, 5, 10, 20].find(s => max / s <= 8) || 50, xmax = Math.ceil(max / step) * step, X = v => LW + (W - LW - RW) * Math.max(0, v || 0) / xmax;
   const ticks = []; for (let v = 0; v <= xmax + 1e-9; v += step) ticks.push(+v.toFixed(2));
   let s = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hay and feed per horse, minimum and standard" style="font-family:inherit">`;
@@ -1350,15 +1424,21 @@ function fdChartSvg(rows, dm, print){
     FD_CHS.forEach(([, c, std], j) => { const y = y0 + j * (bh + gap), w = Math.max(X(v[j]) - LW, 1);
       s += std ? `<rect class="fdbar" x="${LW}" y="${y}" width="${w}" height="${bh}" rx="2" fill="${col[c]}"/>` : `<rect class="fdbar" x="${LW + 0.75}" y="${y + 0.75}" width="${Math.max(w - 1.5, 0.5)}" height="${bh - 1.5}" rx="2" fill="${col[c]}" fill-opacity="0.25" stroke="${col[c]}" stroke-width="1.5"/>`;
       s += `<text x="${X(v[j]) + 4}" y="${y + bh - 1}" font-size="10" fill="${ink}">${fdF(v[j], 2)}</text>`; });
+    const og = fdChOng(r, dm); FD_CHO.forEach(([, c], k) => { const y = y0 + (4 + k) * (bh + gap), val = og[k];
+      if (val === null || val === undefined) { s += `<text x="${LW + 4}" y="${y + bh - 1}" font-size="10" fill="${ink}">${esc(T2("ongoing: no data", "الحالي: لا توجد بيانات"))}</text>`; return; }
+      const w = Math.max(X(val) - LW, 1); s += `<rect class="fdbar" x="${LW + 0.75}" y="${y + 0.75}" width="${Math.max(w - 1.5, 0.5)}" height="${bh - 1.5}" rx="2" fill="none" stroke="${col[c]}" stroke-width="1.5" stroke-dasharray="4 2"/>`;
+      s += `<text x="${X(val) + 4}" y="${y + bh - 1}" font-size="10" fill="${ink}">${fdF(val, 2)}</text>`; });
     if (i < rows.length - 1) s += `<line x1="8" x2="${W - 8}" y1="${top + (i + 1) * band}" y2="${top + (i + 1) * band}" stroke="${line}" stroke-width="1"/>`; });
   return s + "</svg>";
 }
 function fdChTable(rows, dm, print){
   const tot = j => rows.reduce((t, r) => t + (fdChVals(r.R, dm)[j] || 0), 0), n = print ? ' style="text-align:right"' : ' class="num"';
-  return `<table${print ? "" : ' class="fdtab"'}><thead><tr><th>No.</th><th>Horse</th><th>Feeding status</th><th${n}>BWT kg</th><th>Ratio</th><th>Hay</th><th>Feed</th><th${n}>Hay min</th><th${n}>Hay standard</th><th${n}>Feed min</th><th${n}>Feed standard</th><th${n}>Total min</th><th${n}>Total standard</th></tr></thead><tbody>
+  const otot = k => rows.reduce((t, r) => t + (fdChOng(r, dm)[k] || 0), 0), anyO = rows.some(r => fdChOng(r, dm).some(v => v !== null && v !== undefined));
+  const ocells = r => { const o = fdChOng(r, dm), has = o.some(v => v !== null && v !== undefined); return `<td${n}>${fdF(o[0], 2)}</td><td${n}>${fdF(o[1], 2)}</td><td${n}>${has ? "<b>" + fdF((o[0] || 0) + (o[1] || 0), 2) + "</b>" : ""}</td>`; };
+  return `<table${print ? "" : ' class="fdtab"'}><thead><tr><th>No.</th><th>Horse</th><th>Feeding status</th><th${n}>BWT kg</th><th>Ratio</th><th>Hay</th><th>Feed</th><th${n}>Hay min</th><th${n}>Hay standard</th><th${n}>Feed min</th><th${n}>Feed standard</th><th${n}>Total min</th><th${n}>Total standard</th><th${n}>Hay ongoing</th><th${n}>Feed ongoing</th><th${n}>Total ongoing</th></tr></thead><tbody>
     ${rows.map(r => { const v = fdChVals(r.R, dm); return `<tr><td>${esc(r.h.listNo || "")}</td><td>${esc(fdHName(r.h))}${r.h.pid ? " · ID " + esc(r.h.pid) : ""}</td><td>${esc(r.st)}</td><td${n}>${fdF(r.inp.bw, 0)}</td><td>${esc(r.P.ratio || "")}</td><td>${esc(r.R.feeds[0].name || "")}</td><td>${esc(r.R.concList.map(c => c.name).join(" + "))}</td>
-      ${v.map(x => `<td${n}>${fdF(x, 2)}</td>`).join("")}<td${n}><b>${fdF((v[0] || 0) + (v[2] || 0), 2)}</b></td><td${n}><b>${fdF((v[1] || 0) + (v[3] || 0), 2)}</b></td></tr>`; }).join("")}
-    ${rows.length ? `<tr${print ? ' style="font-weight:bold"' : ' class="fdtot"'}><td></td><td><b>Total – ${rows.length} horse(s)</b></td><td colspan="5"></td>${[0, 1, 2, 3].map(j => `<td${n}><b>${fdF(tot(j), 2)}</b></td>`).join("")}<td${n}><b>${fdF(tot(0) + tot(2), 2)}</b></td><td${n}><b>${fdF(tot(1) + tot(3), 2)}</b></td></tr>` : ""}</tbody></table>`;
+      ${v.map(x => `<td${n}>${fdF(x, 2)}</td>`).join("")}<td${n}><b>${fdF((v[0] || 0) + (v[2] || 0), 2)}</b></td><td${n}><b>${fdF((v[1] || 0) + (v[3] || 0), 2)}</b></td>${ocells(r)}</tr>`; }).join("")}
+    ${rows.length ? `<tr${print ? ' style="font-weight:bold"' : ' class="fdtot"'}><td></td><td><b>Total – ${rows.length} horse(s)</b></td><td colspan="5"></td>${[0, 1, 2, 3].map(j => `<td${n}><b>${fdF(tot(j), 2)}</b></td>`).join("")}<td${n}><b>${fdF(tot(0) + tot(2), 2)}</b></td><td${n}><b>${fdF(tot(1) + tot(3), 2)}</b></td>${anyO ? `<td${n}><b>${fdF(otot(0), 2)}</b></td><td${n}><b>${fdF(otot(1), 2)}</b></td><td${n}><b>${fdF(otot(0) + otot(1), 2)}</b></td>` : `<td${n}></td><td${n}></td><td${n}></td>`}</tr>` : ""}</tbody></table>`;
 }
 function fdChartView(body){
   const {ok, miss} = fdChartData(), sts = [...new Set(ok.map(r => r.st))]; if (FD_CH.st && !sts.includes(FD_CH.st)) FD_CH.st = "";
@@ -1374,17 +1454,19 @@ function fdChartView(body){
       <div>Hay – standard</div><div><b>${fdF(v[1], 2)} ${u}</b><div class="small muted">${fdF(r.inp.bw, 0)} kg × ${fdP(s.pct, 2)} = ${fdF(s.tot, 2)} kg DM × hay ${fdP(s.rh, 0)}${div(hd)}</div></div>
       <div>Feed – minimum</div><div><b>${fdF(v[2], 2)} ${u}</b><div class="small muted">${fdF(s.minTot, 2)} kg DM × feed ${fdP(1 - s.rh, 0)}${div(cd)}</div></div>
       <div>Feed – standard</div><div><b>${fdF(v[3], 2)} ${u}</b><div class="small muted">${fdF(s.tot, 2)} kg DM × feed ${fdP(1 - s.rh, 0)}${div(cd)}</div></div>
-      <div>Total – minimum / standard</div><div><b>${fdF((v[0] || 0) + (v[2] || 0), 2)} / ${fdF((v[1] || 0) + (v[3] || 0), 2)} ${u}</b></div></div></div>`; };
+      <div>Total – minimum / standard</div><div><b>${fdF((v[0] || 0) + (v[2] || 0), 2)} / ${fdF((v[1] || 0) + (v[3] || 0), 2)} ${u}</b></div>
+      ${(() => { const o = fdChOng(r, dm); return `<div>Hay / feed – ongoing</div><div>${r.ong ? `<b>${fdF(o[0], 2)} / ${fdF(o[1], 2)} ${u}</b><div class="small muted">${esc(r.ong.srcTxt)}</div>` : '<span class="muted">no data</span>'}</div>`; })()}</div></div>`; };
   body.innerHTML = `<div class="panel"><div class="row" style="align-items:flex-end"><button class="${one ? "" : "pri"}" data-fchm="all">All horses</button><button class="${one ? "pri" : ""}" data-fchm="one">Individual horse</button>
       ${one ? `<label style="max-width:340px">Horse<select id="fchH" data-noother>${ok.map(r => `<option value="${esc(r.h._id)}"${r.h._id === FD_CH.hid ? " selected" : ""}>${esc((r.h.listNo ? r.h.listNo + ". " : "") + fdHName(r.h))}</option>`).join("") || "<option value=''>No horse with enough data</option>"}</select></label>`
         : `<label style="max-width:280px">Feeding status<select id="fchSt" data-noother><option value="">All statuses</option>${sts.map(s => `<option value="${esc(s)}"${s === FD_CH.st ? " selected" : ""}>${esc(s)}</option>`).join("")}</select></label>`}
       <label style="max-width:200px">Amounts<select id="fchDm" data-noother><option value="af">As fed (kg)</option><option value="dm"${dm ? " selected" : ""}>Dry matter (kg DM)</option></select></label>
       <span class="small muted">${rows.length} horse(s)</span><span class="spacer"></span><button id="fchCalc">← Ration calculator (All horses)</button><button id="fchPrint">🖨 Print / PDF</button><button id="fchXlsx">⬇ Excel</button></div>
-    <p class="small muted" style="margin:6px 0 0">Per horse per day. <b>Minimum</b> = body weight × 1.5% (DM) × the ratio. <b>Standard</b> = body weight × feed % by body score / status rule × the ratio. Ratio, hay and feed are the selections of each feeding status group in <b>Ration calculator → All horses</b>; body weight and body score come from Horses Data (→ Examination Sheet → prescription).</p></div>
+    <p class="small muted" style="margin:6px 0 0">Per horse per day. <b>Minimum</b> = body weight × 1.5% (DM) × the ratio. <b>Standard</b> = body weight × feed % by body score / status rule × the ratio. <b>Ongoing</b> = what the horse eats now (last saved final plan or typed in the Ration calculator; blank if no data). Ratio, hay and feed are the selections of each feeding status group in <b>Ration calculator → All horses</b>; body weight and body score come from Horses Data (→ Examination Sheet → prescription).</p></div>
   <div class="panel"><h3 style="margin:0">Hay and feed – minimum and standard per day (${u})${one && r1 ? " – " + esc(fdHName(r1.h)) : ""}</h3>${fdChLegend()}
     <div class="fdchart">${rows.length ? fdChartSvg(rows, dm) : '<p class="muted">No horse has enough saved data yet – add body weight, body score and feeding status in Horses Data.</p>'}<div id="fdTip" class="fdtip" hidden></div></div></div>
   ${one && r1 ? detail(r1) : ""}
   ${rows.length && !one ? `<div class="panel"><h3 style="margin-top:0">Table (${u})</h3><div class="tbl">${fdChTable(rows, dm)}</div></div>` : ""}
+  ${fdExplainHTML()}
   ${miss.length && !one ? `<div class="panel"><h3 style="margin:0 0 4px">Not in the chart</h3><p class="small fdred" style="margin:0">${miss.map(m => `<span class="ar">${esc(fdHName(m.h))}</span> (${esc(m.why)})`).join(" · ")}</p></div>` : ""}`;
   body.querySelectorAll("[data-fchm]").forEach(b => b.onclick = () => { FD_CH.mode = b.dataset.fchm; render(true); });
   const hs = $("#fchH"); if (hs) hs.onchange = e => { FD_CH.hid = e.target.value; render(true); };
@@ -1394,12 +1476,12 @@ function fdChartView(body){
   $("#fchPrint").onclick = () => openPrint(docPage("Hay and feed chart", `<h1>Hay and feed – minimum and standard per day (${esc(u)})</h1><p>${esc(dshow(today()))} · ${esc(title)} · ${rows.length} horse(s)</p>${fdChLegend(true)}${fdChartSvg(rows, dm, true)}${one ? "" : '<div style="break-before:page"></div>'}${fdChTable(rows, dm, true)}
     ${miss.length && !one ? `<p style="color:#b00">Not in the chart: ${miss.map(m => esc(fdHName(m.h)) + " (" + esc(m.why) + ")").join(" · ")}</p>` : ""}<p style="margin-top:24px">Veterinarian Doctor: ____________________</p>`));
   $("#fchXlsx").onclick = () => { const r2 = v => v == null ? "" : +(+v).toFixed(2);
-    saveFile(`hay_feed_min_standard_${one && r1 ? String(r1.h.nameEn || r1.h.name || r1.h.pid).replace(/[^\w؀-ۿ-]+/g, "_") + "_" : ""}${today()}.xlsx`, makeXlsx([{name:"Min and standard", rows:[["No.","Patient ID","Name","Name (English)","Feeding status","BWT kg","BCS","Ratio","Hay","Feed",`Hay min (${u})`,`Hay standard (${u})`,`Feed min (${u})`,`Feed standard (${u})`,`Total min (${u})`,`Total standard (${u})`],
-      ...rows.map(r => { const v = fdChVals(r.R, dm); return [r.h.listNo || "", r.h.pid || "", r.h.name || "", r.h.nameEn || "", r.st, r.inp.bw ?? "", r.inp.bcs ?? "", r.P.ratio || "", r.R.feeds[0].name || "", r.R.concList.map(c => c.name).join(" + "), ...v.map(r2), r2((v[0] || 0) + (v[2] || 0)), r2((v[1] || 0) + (v[3] || 0))]; }),
+    saveFile(`hay_feed_min_standard_${one && r1 ? String(r1.h.nameEn || r1.h.name || r1.h.pid).replace(/[^\w؀-ۿ-]+/g, "_") + "_" : ""}${today()}.xlsx`, makeXlsx([{name:"Min and standard", rows:[["No.","Patient ID","Name","Name (English)","Feeding status","BWT kg","BCS","Ratio","Hay","Feed",`Hay min (${u})`,`Hay standard (${u})`,`Feed min (${u})`,`Feed standard (${u})`,`Total min (${u})`,`Total standard (${u})`,`Hay ongoing (${u})`,`Feed ongoing (${u})`,`Total ongoing (${u})`],
+      ...rows.map(r => { const v = fdChVals(r.R, dm), o = fdChOng(r, dm), has = o.some(x => x !== null && x !== undefined); return [r.h.listNo || "", r.h.pid || "", r.h.name || "", r.h.nameEn || "", r.st, r.inp.bw ?? "", r.inp.bcs ?? "", r.P.ratio || "", r.R.feeds[0].name || "", r.R.concList.map(c => c.name).join(" + "), ...v.map(r2), r2((v[0] || 0) + (v[2] || 0)), r2((v[1] || 0) + (v[3] || 0)), r2(o[0]), r2(o[1]), has ? r2((o[0] || 0) + (o[1] || 0)) : ""]; }),
       ...(one ? [] : miss.map(m => [m.h.listNo || "", m.h.pid || "", m.h.name || "", m.h.nameEn || "", m.st, "", "", "", "", m.why]))]}])); };
   const box = body.querySelector(".fdchart"), tip = $("#fdTip");
   if (box) box.querySelectorAll(".fdhit").forEach(el => { const show = ev => { const r = rows[+el.dataset.i], v = fdChVals(r.R, dm);
-      tip.innerHTML = `<b>${esc(fdHName(r.h))}</b><div class="small muted">${esc(r.st)} · ${fdF(r.inp.bw, 0)} kg BW</div>${FD_CHS.map(([l], j) => `<div>${esc(l)}: <b>${fdF(v[j], 2)}</b> ${u}</div>`).join("")}`;
+      tip.innerHTML = `<b>${esc(fdHName(r.h))}</b><div class="small muted">${esc(r.st)} · ${fdF(r.inp.bw, 0)} kg BW</div>${FD_CHS.map(([l], j) => `<div>${esc(l)}: <b>${fdF(v[j], 2)}</b> ${u}</div>`).join("")}${FD_CHO.map(([l], k) => { const o = fdChOng(r, dm)[k]; return `<div>${esc(l)}: ${o === null || o === undefined ? "no data" : "<b>" + fdF(o, 2) + "</b> " + u}</div>`; }).join("")}`;
       tip.hidden = false; const bb = box.getBoundingClientRect(); let x = ev.clientX - bb.left + 14; if (x + 240 > bb.width) x -= 260; tip.style.left = Math.max(0, x) + "px"; tip.style.top = (ev.clientY - bb.top + 14) + "px"; };
     el.addEventListener("mousemove", show); el.addEventListener("click", show); el.addEventListener("mouseleave", () => { tip.hidden = true; }); });
 }
@@ -1410,8 +1492,10 @@ function feedCalc(inp, plan){
   const C = FCFG(), st = C.settings, R = {inp, plan};
   const bw = N(inp.bw), bcs = N(inp.bcs), status = inp.status || "";
   // age, standard weight for age, daily gain, mature height
-  R.age = fdAgeM(inp.dob); R.matureUsed = N(inp.matureBw) ?? fdN(st.DEFAULT_MATURE_BW);
-  const g = R.age === null ? null : fdInterp(C.gbw, "age_months", "pct_mature_BW", R.age);
+  // mature weight: typed Standard BWT (kept as mature weight) → auto from breed, age and height → DEFAULT_MATURE_BW (no height)
+  R.age = fdAgeM(inp.dob); R.sbAuto = bwtStd({dob:inp.dob, heightCm:inp.height, lengthIn:inp.lengthIn, breed:inp.breed});
+  R.matureUsed = N(inp.matureBw) ?? R.sbAuto.mature ?? fdN(st.DEFAULT_MATURE_BW); R.matureSrc = N(inp.matureBw) !== null ? "typed" : R.sbAuto.mature ? "auto" : "default";
+  const gfr = gbwFor(inp.breed), g = R.age === null ? null : fdInterp(gfr.pts, "age_months", "pct_mature_BW", R.age); R.growthRef = gfr.ref;
   R.stdBw = g ? R.matureUsed * g.y / 100 : null; R.stdGain = g ? R.matureUsed * g.s / 100 / 30.4375 : null;
   R.bwVsStd = R.stdBw && bw ? bw / R.stdBw : null;
   const hp = (R.age === null || R.age < 3) ? null : fdInterp(C.ght, "age_months", "pct_mature_height", R.age);
@@ -1478,7 +1562,10 @@ function feedCalc(inp, plan){
   const sMin = item("sMin", "Supplement – Minerals", pm && pm.feed, fdN(st.PREMIX_G_PER_DAY) / 1000, true);
   const sX = fdXOn(plan).map(k => { const X = FD_X[k], pr = suppById(X.supp), per = pr ? (pr[k] || 0) * X.f : 0; // per kg DM of the product
     return item("x" + k, "Supplement – " + X.n, pr && pr.feed, R.xreq && per ? Math.max(0, R.xreq[k] - R.sub[k]) / per : 0, true); });
-  R.supps = [sP, sCa, sLys, sMet, sMin, ...sX]; R.tot = sum([...R.feeds, ...R.supps]);
+  const sXc = (Array.isArray(plan.xc) ? plan.xc : []).map((x, i) => ({x, i})).filter(o => o.x && (o.x.name || N(o.x.g) !== null)).map(({x, i}) => { const lib = x.name ? feedRow(x.name) : null, ca = N(x.ca), pp = N(x.p);
+    const row = lib ? Object.assign({}, lib, ca !== null ? {ca} : {}, pp !== null ? {p:pp} : {}) : {id:"XC", feed:x.name || "Extra supplement", cat:"Supplement", dm:100, de:0, cp:0, ca:ca ?? 0, p:pp ?? 0, lys:0, met:0, ve:0, se:0, mg:0, k:0};
+    return item("xc" + i, "Extra supplement", x.name || "Extra supplement", (N(x.g) ?? 0) / 1000 * (row.dm ? row.dm / 100 : 1), true, row); });
+  R.supps = [sP, sCa, sLys, sMet, sMin, ...sX, ...sXc]; R.tot = sum([...R.feeds, ...R.supps]);
   // comparison rows
   const hay = R.feeds[0], conc = R.feeds.slice(1), concPlanned = conc.reduce((a, x) => a + x.plannedAF, 0), concUsed = conc.reduce((a, x) => a + x.used, 0);
   R.hayF = hay.f; R.rRange = hay.f && hay.f.rmin !== null ? [hay.f.rmin, hay.f.rmax] : null;
@@ -1520,7 +1607,7 @@ function fdLoadHorse(id, fromPlan){
   const p = fromPlan ? fromPlan.plan : h.feedPlan;
   FD = {hid:id, inp:fromPlan ? Object.assign(fdInputs(h), fromPlan.inp || {}) : fdInputs(h), plan:Object.assign(fdDefaults(), p || {}, {adj:Object.assign({}, (p && p.adj) || {})}), from:fromPlan ? fromPlan._id : ""};
   if (FD.plan.conc2 && !(FD.plan.concs || []).length) { FD.plan.concs = [{name:FD.plan.conc2, part:100}]; FD.plan.conc2 = ""; if ("c2" in FD.plan.adj) { FD.plan.adj.cx0 = FD.plan.adj.c2; delete FD.plan.adj.c2; } }
-  FD.plan.concs = (FD.plan.concs || []).map(c => Object.assign({}, c)); FD.plan.hays = fdHays(FD.plan).map(c => Object.assign({}, c)); FD.plan.xs = fdXOn(FD.plan).slice();
+  FD.plan.concs = (FD.plan.concs || []).map(c => Object.assign({}, c)); FD.plan.hays = fdHays(FD.plan).map(c => Object.assign({}, c)); FD.plan.xs = fdXOn(FD.plan).slice(); FD.plan.xc = (Array.isArray(FD.plan.xc) ? FD.plan.xc : []).map(x => Object.assign({}, x));
 }
 const fdHorses = () => (S.horses || []).slice().sort((a, b) => ((parseFloat(a.listNo) || 1e9) - (parseFloat(b.listNo) || 1e9)) || String(a.nameEn || a.name || "").localeCompare(String(b.nameEn || b.name || "")));
 const fdHName = h => [h.name, h.nameEn].filter(Boolean).join(" / ") || h.pid || "(no name)";
@@ -1543,33 +1630,36 @@ function fdCalcView(body){
   const H = fdHorses(); if (FD && !H.some(h => h._id === FD.hid)) FD = null;
   const C = FCFG(), st = C.settings;
   const scope = `<label style="max-width:220px">Calculation<select id="fdScope" data-noother><option value="one"${FD_SCOPE === "one" ? " selected" : ""}>Individual horse</option><option value="all"${FD_SCOPE === "all" ? " selected" : ""}>All horses</option></select></label>`;
-  const wireScope = () => { const sc = $("#fdScope"); if (sc) sc.onchange = () => { FD_SCOPE = sc.value; render(true); }; };
-  if (FD_SCOPE === "all") { fdCalcAllView(body, scope); wireScope(); return; }
-  if (!FD) { body.innerHTML = `<div class="panel"><div class="row" style="align-items:flex-end">${scope}<label style="flex:1;max-width:520px">Horse<select id="fdH"><option value="">— choose a horse —</option>${H.map(h => `<option value="${esc(h._id)}">${esc((h.listNo ? h.listNo + ". " : "") + fdHName(h) + (h.pid ? " · ID " + h.pid : ""))}</option>`).join("")}</select></label></div>
+  const scopeTxt = scope + `<label style="max-width:300px">Print formulation<select id="fdPF" data-noother><option value="all">All horses</option>${H.map(h => `<option value="${esc(h._id)}"${FD && FD.hid === h._id ? " selected" : ""}>${esc((h.listNo ? h.listNo + ". " : "") + fdHName(h))}</option>`).join("")}</select></label><button id="fdPFgo" title="Ongoing / required / short-extra table for the owner">🖨 Print formulation</button>`;
+  const wireScope = () => { const sc = $("#fdScope"); if (sc) sc.onchange = () => { FD_SCOPE = sc.value; render(true); };
+    const pf = $("#fdPFgo"); if (pf) pf.onclick = () => fdFormPrint($("#fdPF").value); };
+  if (FD_SCOPE === "all") { fdCalcAllView(body, scopeTxt); wireScope(); return; }
+  if (!FD) { body.innerHTML = `<div class="panel"><div class="row" style="align-items:flex-end">${scopeTxt}<label style="flex:1;max-width:520px">Horse<select id="fdH"><option value="">— choose a horse —</option>${H.map(h => `<option value="${esc(h._id)}">${esc((h.listNo ? h.listNo + ". " : "") + fdHName(h) + (h.pid ? " · ID " + h.pid : ""))}</option>`).join("")}</select></label></div>
     ${H.length ? '<p class="small muted">Choose a horse to start. Its body weight, body score and feeding status are taken from Horses Data – you can complete them here.</p>' : '<p class="muted">No horses yet – add them in Horses Data first.</p>'}</div>`;
     const s = $("#fdH"); if (s) s.onchange = () => { if (s.value) { fdLoadHorse(s.value); render(true); } }; wireScope(); return; }
   const h = H.find(x => x._id === FD.hid), I = FD.inp, P = FD.plan, R = feedCalc(I, P);
   const changed = ["bw","bcs","status","height","matureBw"].some(k => String(I[k] ?? "") !== String(fdInputs(h)[k] ?? ""));
-  const stat = C.statuses.map(x => x.status), b = bcsRow(I.bcs);
+  const stat = C.statuses.map(x => x.status), b = bcsRow(I.bcs), SB = bwtStd({dob:I.dob, heightCm:I.height, lengthIn:h.lengthIn, breed:h.breed, matureBw:I.matureBw});
   const pellets = feedsOf("Pellet"), mixes = feedsOf("Concentrate"), hays = feedsOf("Hay");
-  body.innerHTML = `<div class="panel"><div class="row" style="align-items:flex-end">${scope}<label style="flex:1;max-width:520px">Horse<select id="fdH">${H.map(x => `<option value="${esc(x._id)}"${x._id === FD.hid ? " selected" : ""}>${esc((x.listNo ? x.listNo + ". " : "") + fdHName(x) + (x.pid ? " · ID " + x.pid : ""))}</option>`).join("")}</select></label>
+  body.innerHTML = `<div class="panel"><div class="row" style="align-items:flex-end;flex-wrap:wrap">${scopeTxt}<label style="flex:1;max-width:520px">Horse<select id="fdH">${H.map(x => `<option value="${esc(x._id)}"${x._id === FD.hid ? " selected" : ""}>${esc((x.listNo ? x.listNo + ". " : "") + fdHName(x) + (x.pid ? " · ID " + x.pid : ""))}</option>`).join("")}</select></label>
       <span class="spacer"></span>${FD.from ? '<span class="pill p-n">Opened from a saved plan</span>' : ""}</div>
     <h3>1. Horse (saved data loaded automatically)</h3>
     <div class="grid g4">
-      <label>Body weight (kg)<input id="fd_bw" type="number" step="any" value="${esc(I.bw ?? "")}"></label>
+      <label>Body weight (kg)<input id="fd_bw" type="number" step="any" value="${esc(I.bw ?? "")}">${bwtMark(I.bw, SB.std) ? `<span class="small${bwtMark(I.bw, SB.std) !== "OK" ? " fdred" : ""}" style="text-transform:none;letter-spacing:0" data-notr>${esc(bwtTxt(I.bw, SB.std))}</span>` : ""}</label>
       <label>Body condition score<select id="fd_bcs"><option value="">— choose —</option>${C.bcs.map(x => `<option value="${x.score}"${+x.score === N(I.bcs) ? " selected" : ""}>${x.score} – ${esc(x.class)} (${esc(x.henneke)})</option>`).join("")}</select></label>
       <label>Feeding status<select id="fd_status"><option value="">— choose —</option>${fdOpt(stat, I.status)}</select></label>
       <label>Birth date<input value="${esc(I.dob ? dshow(I.dob) : "")}" disabled title="Change it in Horses Data"></label>
       ${heightField("fd_", I.height)}
-      <label>Mature body weight (kg)<input id="fd_matureBw" type="number" step="any" value="${esc(I.matureBw ?? "")}" placeholder="${esc(st.DEFAULT_MATURE_BW)} if blank"></label>
+      <label title="Auto from breed, age and height (blank = auto). Type to replace it for this horse.">Standard BWT (kg) – breed · age · height<input id="fd_stdBw" type="number" step="any" value="${esc(SB.std ? Math.round(SB.std) : "")}" placeholder="${esc(T2("needs height", "يحتاج الارتفاع"))}"></label>
     </div>
     ${(() => { const sv = fdSaved(h), lb = {bw:"Body weight", height:"Height", bcs:"Body condition score", status:"Feeding status"}, nd = fdNoData(I);
       return `<p class="small" style="margin:6px 0"><b>Taken from saved data:</b> ${Object.keys(lb).filter(k => sv.src[k]).map(k => `${esc(lb[k])} – ${esc(sv.src[k])}`).join(" · ") || "none"}</p>${nd.length ? `<p class="small fdred" style="margin:4px 0">${esc(nd.join(", "))}: ${esc(FD_NOD)}</p>` : ""}`; })()}
     ${b ? `<p class="small" style="margin:6px 0"><b>BCS ${b.score} – ${esc(b.class)}:</b> ${esc(b.description)}</p>` : ""}
     <div class="kv" style="margin-top:6px">
       <div>Age</div><div>${R.age === null ? '<span class="muted">no birth date</span>' : fdF(R.age, 1) + " months (" + fdF(R.age / 12, 1) + " yrs)"}</div>
-      <div>Standard body weight for age</div><div>${R.stdBw === null ? "" : fdF(R.stdBw, 0) + " kg"}${R.bwVsStd ? ` <span${R.bwVsStd < 0.9 || R.bwVsStd > 1.1 ? ' class="fdred"' : ""}>(actual = ${fdP(R.bwVsStd, 0)} of standard)</span>` : ""}</div>
-      <div>Standard daily gain</div><div>${R.stdGain === null ? "" : R.stdGain > 0 ? fdF(R.stdGain, 2) + " kg/day" : "Fully grown"}</div>
+      <div>Standard BWT – how it is worked out</div><div><span data-notr>${esc(BWT_TYPE_NAME[SB.type] || "")}${SB.method ? " – " + esc(SB.method) : esc(T2(" – needs height", " – يحتاج الارتفاع"))} · ${esc(T2("±" + BWT_TOL + " kg of standard = OK", "±" + BWT_TOL + " كجم من القياسي = مناسب"))}</span>${h.bwtRemark ? ` <span class="small muted">(Remarks on BWT in Horses Data: ${esc(h.bwtRemark)})</span>` : ""}<div class="small muted" data-notr>${esc(T2("Reference: " + BWT_REF_TXT, "المرجع: " + BWT_REF_AR))}</div></div>
+      <div>Growth stage</div><div data-notr>${R.age === null ? "" : esc(growthStage(R.age).t)}</div>
+      <div>Standard daily gain</div><div>${R.stdGain === null ? "" : R.age >= 60 ? esc(T2("0 – adult, no growth gain", "0 – بالغ، لا زيادة نمو")) : R.stdGain > 0 ? `<span data-notr>${esc(T2(fdF(R.stdGain, 2) + " kg/day · " + fdF(R.stdGain * 30.4375, 1) + " kg/month", fdF(R.stdGain, 2) + " كجم/يوم · " + fdF(R.stdGain * 30.4375, 1) + " كجم/شهر"))}</span>${R.growthRef && R.age !== null && R.age <= R.growthRef.pts[R.growthRef.pts.length - 1][0] ? `<div class="small muted">${esc(R.growthRef.src)}</div>` : ""}` : "Fully grown"}</div>
       <div>Estimated mature height</div><div>${R.estHeight === null ? (R.age !== null && R.age < 3 ? "from 3 months of age" : "") : fdF(R.estHeight, 0) + " cm"}</div>
       <div>BCS class</div><div>${esc(R.bcsClass)}</div>
     </div>
@@ -1607,7 +1697,8 @@ function fdCalcView(body){
   <div id="fdRes"></div>`;
   fdDrawRes(R);
   const H2 = $("#fdH"); H2.onchange = () => { fdLoadHorse(H2.value); render(true); }; wireScope();
-  ["bw","bcs","status","matureBw"].forEach(k => { const el = $("#fd_" + k); el.onchange = () => { FD.inp[k] = el.type === "number" || k === "bcs" ? N(el.value) : el.value; render(true); }; });
+  ["bw","bcs","status"].forEach(k => { const el = $("#fd_" + k); el.onchange = () => { FD.inp[k] = el.type === "number" || k === "bcs" ? N(el.value) : el.value; render(true); }; });
+  { const el = $("#fd_stdBw"); if (el) el.onchange = () => { const v = N(el.value), pc = R.sbAuto.pct || 100; FD.inp.matureBw = v === null ? null : Math.round(v * 100 / pc * 10) / 10; render(true); }; }
   wireHeight(body, "fd_"); ["heightCm","heightHh"].forEach(k => { const el = $("#fd_" + k); el.onchange = () => { FD.inp.height = N($("#fd_heightCm").value); render(true); }; });
   ["ratio","mode","conc1","share","hay","override","basis"].forEach(k => { const el = $("#fd_" + k); if (!el) return; el.onchange = () => {
     FD.plan[k] = el.value;
@@ -1622,6 +1713,190 @@ function fdCalcView(body){
   const ac = $("#fdAddConc"); if (ac) ac.onclick = () => { clrAdj(); setConcs(c => { const used = c.map(x => x.name), nx = mixes.find(m => !used.includes(m)) || mixes[0] || ""; const eq = c.length ? Math.round(100 / (c.length + 1)) : 100; c.forEach(x => x.part = eq); c.push({name:nx, part:eq}); }); };
   fdWireHays(body, () => FD.plan, () => render(true));
   const sh = $("#fdSaveH"); if (sh) sh.onclick = async () => { await saveHorseFields(h, {weightKg:N(I.bw) ?? "", bcs:I.bcs ?? "", feedStatus:I.status || "", heightCm:I.height ?? "", matureBw:I.matureBw ?? ""}); toast("Saved to Horses Data."); };
+}
+/* gradual change of the ration: feed (concentrate) change > 0.5 kg or hay change > 2 kg/day → step by step
+   NRC 2007 (Nutrient Requirements of Horses, via The Horse – K. Janicki 2018): increase grain ≈ 0.5 lb (0.25 kg)/day; reduce over 1–2 weeks;
+   new feed / hay type: replace 25% every other day (eXtension); Mad Barn Diet Transition: 7–21 days; MSD Vet Manual: ≤ 0.5% BW concentrate per meal */
+const FDG_REF_AR = "المراجع: NRC 2007 الاحتياجات الغذائية للخيول (The Horse – K. Janicki، 2018): زيادة الحبوب نحو 0.5 رطل (0.25 كجم) يومياً، والإنقاص خلال 1–2 أسبوع، وتغيير الدريس نحو 25% كل يومين تقريباً؛ eXtension: العلف الجديد يحل محل القديم بنسبة 25% كل يومين؛ حاسبة Mad Barn: 7–21 يوماً وأطول للتغييرات الأكبر؛ دليل MSD البيطري: لا يزيد المركز عن 0.5% من وزن الجسم في الوجبة.";
+const FDG_REF = "References: NRC 2007 Nutrient Requirements of Horses (The Horse – K. Janicki, 2018): increase grain about 0.5 lb (0.25 kg) per day, reduce over 1–2 weeks, change hay about 25% at a time every couple of days; eXtension: new feed replaces the old 25% every other day; Mad Barn Diet Transition Calculator: 7–21 days, longer for bigger changes; MSD Veterinary Manual: no more than 0.5% of BW of concentrate per meal.";
+function fdStep(oldKg, newKg, kind){
+  oldKg = N(oldKg); newKg = N(newKg); if (oldKg === null || newKg === null) return null;
+  const d = newKg - oldKg, a = Math.abs(d), lim = kind === "feed" ? 0.5 : 2; if (!(a > lim + 1e-9)) return null;
+  let every = 1, step, days;
+  if (kind === "feed" && d > 0) { step = 0.25; days = Math.ceil(a / step - 1e-9); }
+  else if (kind === "feed") { days = a > 2 ? 14 : 7; step = a / days; }
+  else { every = 2; step = a / 4; days = 8; }
+  const n = Math.ceil(days / every), pts = [];
+  for (let i = 1; i <= n; i++) pts.push({day:(i - 1) * every + 1, kg:i === n ? newKg : oldKg + Math.sign(d) * step * i});
+  return {d, a, every, step, days, pts, oldKg, newKg, kind};
+}
+const fdgAt = (g, day) => { if (!g) return null; let v = g.oldKg; g.pts.forEach(p => { if (p.day <= day) v = p.kg; }); return v; };
+/* ongoing ration = what the horse eats now: typed in the Ration Calculator (kept in Horses Data) or the last saved FINAL plan – whichever is newer.
+   ME, Ca and P of the ongoing ration come from the feed library: kg as fed × DM% = kg DM; ME = DM × DE × ME/DE factor; Ca, P g = DM × % × 10 (feed + hay only). */
+function fdOngFromRows(feedName, feedKg, hayName, hayKg){
+  const MEf = fdN(FST().ME_DE_FACTOR), one = (n, kg) => { kg = N(kg); if (kg === null) return null; const f = n ? feedRow(n) : null; if (!f || !f.dm) return {kg, dm:null, me:null, ca:null, p:null}; const dm = kg * f.dm / 100; return {kg, dm, me:dm * f.de * MEf, ca:dm * f.ca * 10, p:dm * f.p * 10}; };
+  const a = one(feedName, feedKg), b = one(hayName, hayKg); if (!a && !b) return null;
+  const s = k => (a && a[k] === null) || (b && b[k] === null) ? null : (a ? a[k] : 0) + (b ? b[k] : 0);
+  return {feedKg:a ? a.kg : null, hayKg:b ? b.kg : null, feedDM:a ? a.dm : null, hayDM:b ? b.dm : null, me:s("me"), ca:s("ca"), p:s("p"), feedNames:feedName ? [feedName] : [], hayNames:hayName ? [hayName] : []};
+}
+const fdLastFinal = hid => (S.feedPlans || []).filter(p => p.horseId === hid && p.status === "Final" && p.plan).sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")))[0] || null;
+function fdOngoing(h){
+  if (!h) return null;
+  const t = h.ongoing && (N(h.ongoing.feedKg) !== null || N(h.ongoing.hayKg) !== null) ? h.ongoing : null, pp = fdLastFinal(h._id);
+  if (t && (!pp || String(t.date || "") >= String(pp.savedAt || ""))) { const o = fdOngFromRows(t.feed, t.feedKg, t.hay, t.hayKg); if (o) return Object.assign(o, {src:"typed", srcTxt:T2("typed ", "مُدخل يدوياً ") + dshow(String(t.date || "").slice(0, 10)), date:t.date || ""}); }
+  if (pp) { try { const inp = Object.assign(fdInputs(h), pp.inp || {}), P = Object.assign(fdDefaults(), pp.plan, {adj:Object.assign({}, pp.plan.adj || {})}), R2 = feedCalc(inp, P);
+    const hay = R2.feeds[0], cs = R2.feeds.slice(1);
+    const rs = pp.res || {};
+    return {feedKg:N(rs.concKg) ?? R2.cmp.feeds.conc, hayKg:N(rs.hayKg) ?? (hay ? hay.used : null), feedDM:cs.reduce((x, y) => x + y.uDM, 0), hayDM:hay ? hay.uDM : null, me:R2.cmp.feeds.me, ca:R2.cmp.feeds.ca, p:R2.cmp.feeds.p,
+      feedNames:cs.filter(x => x.used > 0).map(x => x.name), hayNames:hay && hay.name ? [hay.name] : [], src:"plan", srcTxt:T2("last saved final plan ", "آخر خطة نهائية محفوظة ") + dshow(String(pp.savedAt || pp.date || "").slice(0, 10)), date:pp.savedAt || ""}; } catch(e){} }
+  return null;
+}
+const FD_OK_KEYS = [["feed","Feed kg/day","العلف كجم/يوم",2],["hay","Hay kg/day","الدريس كجم/يوم",2],["me","ME MJ/day","الطاقة ME ميجاجول/يوم",1],["ca","Ca g/day","الكالسيوم غ/يوم",1],["p","P g/day","الفوسفور غ/يوم",1]];
+function fdOngRows(R, ong){
+  const q = R.req, rq = {feed:R.cmp.req.conc, hay:R.cmp.req.hay, me:q ? q.me : null, ca:q ? q.ca : null, p:q ? q.p : null};
+  const on = ong ? {feed:ong.feedKg, hay:ong.hayKg, me:ong.me, ca:ong.ca, p:ong.p} : null;
+  const df = on ? Object.fromEntries(FD_OK_KEYS.map(([k]) => [k, N(on[k]) === null || N(rq[k]) === null ? null : on[k] - rq[k]])) : null;
+  return {rq, on, df};
+}
+function fdOngTable(R, ong, print){
+  const {rq, on, df} = fdOngRows(R, ong), n = print ? ' style="text-align:right"' : ' class="num"';
+  const cell = (v, d) => `<td${n}>${v === null || v === undefined ? "" : fdF(v, d)}</td>`;
+  const dcell = (v, d) => { if (v === null || v === undefined) return `<td${n}></td>`; const z = Math.abs(v) < Math.pow(10, -d) / 2, t = z ? fdF(0, d) : (v > 0 ? "+" : "−") + fdF(Math.abs(v), d) + " " + (v > 0 ? T2("extra", "زيادة") : T2("short", "نقص"));
+    return `<td${n}${!z && v < 0 ? (print ? ' style="text-align:right;color:#b00"' : ' class="num fdred"') : ""}>${esc(t)}</td>`; };
+  return `<table data-notr${print ? "" : ' class="fdtab"'}><thead><tr><th></th>${FD_OK_KEYS.map(([, l, a]) => `<th${n}>${esc(T2(l, a))}</th>`).join("")}</tr></thead><tbody>
+    <tr><td><b>${esc(T2("Ongoing", "الحالي"))}</b>${ong ? `<br><small>${esc(ong.srcTxt)}</small>` : ""}</td>${FD_OK_KEYS.map(([k, , , d]) => cell(on ? on[k] : null, d)).join("")}</tr>
+    <tr><td><b>${esc(T2("Required", "المطلوب"))}</b></td>${FD_OK_KEYS.map(([k, , , d]) => cell(rq[k], d)).join("")}</tr>
+    <tr><td><b>${esc(T2("Short / Extra", "النقص / الزيادة"))}</b><br><small>${esc(T2("ongoing − required", "الحالي − المطلوب"))}</small></td>${FD_OK_KEYS.map(([k, , , d]) => dcell(df ? df[k] : null, d)).join("")}</tr></tbody></table>`;
+}
+// adjustment suggestions for the owner: from the ongoing ration to this plan (feed / hay up or down, new feed or hay, supplements)
+const fdArAmt = t => String(t).replace(/ kg\b/g, " كجم").replace(/ g\b/g, " غ");
+function fdOwnerTips(R, ong){
+  const T = [], tc = R.cmp.all.conc, th = R.cmp.all.hay, concs = R.feeds.slice(1).filter(x => x.used > 0), hayN = R.feeds[0].name || T2("hay", "الدريس"), feedN = concs.map(x => x.name).join(" + ") || T2("feed", "العلف");
+  const supE = R.supps.filter(x => x.used * 1000 >= 0.05).map(x => x.name + " " + fdAmt2(x) + "/day"), supA = R.supps.filter(x => x.used * 1000 >= 0.05).map(x => x.name + " " + fdArAmt(fdAmt2(x)) + "/يوم");
+  const meals = () => T.push(T2(`Split the feed into ${R.meals} meals – not more than ${fdF(R.maxMeal, 2)} kg per meal.`, `قسّم العلف على ${R.meals} وجبات – لا يزيد عن ${fdF(R.maxMeal, 2)} كجم في الوجبة.`));
+  if (!ong) {
+    T.push(T2(`Feed this ration every day: ${hayN} ${fdF(th, 2)} kg; ${concs.map(x => x.name + " " + fdF(x.used, 2) + " kg").join("; ") || "no feed"}.`, `قدّم هذه العليقة يومياً: ${hayN} ${fdF(th, 2)} كجم؛ ${concs.map(x => x.name + " " + fdF(x.used, 2) + " كجم").join("؛ ") || "بدون علف"}.`));
+    meals();
+    T.push(T2("If the horse now eats a different ration, change over slowly: feed up by 0.25 kg a day; hay up or down by about a quarter of the change every 2 days.", "إذا كان الحصان يأكل الآن عليقة مختلفة فغيّر تدريجياً: زد العلف 0.25 كجم يومياً، وزد أو أنقص الدريس بنحو ربع الفرق كل يومين."));
+  } else {
+    if (N(ong.feedKg) !== null) { const d = tc - ong.feedKg, g = fdStep(ong.feedKg, tc, "feed"), up = d > 0;
+      if (Math.abs(d) < 0.1) T.push(T2(`Feed (${feedN}): keep at ${fdF(tc, 2)} kg/day.`, `العلف (${feedN}): يبقى ${fdF(tc, 2)} كجم/يوم.`));
+      else T.push(T2(`${up ? "Increase" : "Reduce"} feed (${feedN}) by ${fdF(Math.abs(d), 2)} kg/day – from ${fdF(ong.feedKg, 2)} to ${fdF(tc, 2)} kg/day` + (g ? (up ? ` – slowly: add 0.25 kg per day for ${g.days} days.` : ` – slowly: about ${fdF(g.step, 2)} kg less per day over ${g.days} days.`) : " – can be done at once (change not more than 0.5 kg)."),
+        `${up ? "زد" : "أنقص"} العلف (${feedN}) بمقدار ${fdF(Math.abs(d), 2)} كجم/يوم – من ${fdF(ong.feedKg, 2)} إلى ${fdF(tc, 2)} كجم/يوم` + (g ? (up ? ` – تدريجياً: أضف 0.25 كجم يومياً لمدة ${g.days} أيام.` : ` – تدريجياً: أنقص نحو ${fdF(g.step, 2)} كجم يومياً خلال ${g.days} أيام.`) : " – يمكن التغيير مرة واحدة (التغيير لا يزيد عن 0.5 كجم).")));
+    } else T.push(T2(`Feed (${feedN}): ${fdF(tc, 2)} kg/day.`, `العلف (${feedN}): ${fdF(tc, 2)} كجم/يوم.`));
+    if (N(ong.hayKg) !== null) { const d = th - ong.hayKg, g = fdStep(ong.hayKg, th, "hay"), up = d > 0;
+      if (Math.abs(d) < 0.1) T.push(T2(`Hay (${hayN}): keep at ${fdF(th, 2)} kg/day.`, `الدريس (${hayN}): يبقى ${fdF(th, 2)} كجم/يوم.`));
+      else T.push(T2(`${up ? "Increase" : "Reduce"} hay (${hayN}) by ${fdF(Math.abs(d), 2)} kg/day – from ${fdF(ong.hayKg, 2)} to ${fdF(th, 2)} kg/day` + (g ? ` – slowly: about ${fdF(g.step, 2)} kg every 2 days, full amount from day ${g.pts[g.pts.length - 1].day}.` : " – can be done at once (change not more than 2 kg)."),
+        `${up ? "زد" : "أنقص"} الدريس (${hayN}) بمقدار ${fdF(Math.abs(d), 2)} كجم/يوم – من ${fdF(ong.hayKg, 2)} إلى ${fdF(th, 2)} كجم/يوم` + (g ? ` – تدريجياً: نحو ${fdF(g.step, 2)} كجم كل يومين، والكمية الكاملة من اليوم ${g.pts[g.pts.length - 1].day}.` : " – يمكن التغيير مرة واحدة (التغيير لا يزيد عن 2 كجم).")));
+    } else T.push(T2(`Hay (${hayN}): ${fdF(th, 2)} kg/day.`, `الدريس (${hayN}): ${fdF(th, 2)} كجم/يوم.`));
+    const lc = a => a.map(x => String(x).toLowerCase()).sort().join("+");
+    if (ong.feedNames.length && concs.length && lc(ong.feedNames) !== lc(concs.map(x => x.name))) T.push(T2(`New feed (${ong.feedNames.join(" + ")} → ${feedN}): mix with the old feed – replace about a quarter every 2 days, full change in about 7 days.`, `علف جديد (${ong.feedNames.join(" + ")} → ${feedN}): اخلطه مع العلف القديم – استبدل نحو الربع كل يومين، والتغيير الكامل خلال نحو 7 أيام.`));
+    if (ong.hayNames.length && R.feeds[0].name && lc(ong.hayNames) !== lc([R.feeds[0].name])) T.push(T2(`New hay (${ong.hayNames.join(" + ")} → ${hayN}): mix with the old hay – replace about a quarter every 2–3 days, full change in about 14 days.`, `دريس جديد (${ong.hayNames.join(" + ")} → ${hayN}): اخلطه مع الدريس القديم – استبدل نحو الربع كل 2–3 أيام، والتغيير الكامل خلال نحو 14 يوماً.`));
+    meals();
+  }
+  if (supE.length) T.push(T2("Add: " + supE.join("; ") + ".", "أضف: " + supA.join("؛ ") + "."));
+  const F = R.flag, LH = {LOW:"منخفضة", HIGH:"مرتفعة"};
+  if (fdBad(F.me)) T.push(T2(`Energy of the new ration is ${F.me} – ask the vet before feeding.`, `طاقة العليقة الجديدة ${LH[F.me] || F.me} – استشر الطبيب البيطري قبل التقديم.`));
+  ["ca","p"].forEach(k => { if (fdBad(F[k])) T.push(T2(`${k === "ca" ? "Calcium" : "Phosphorus"} is still ${F[k]} – ask the vet for a supplement.`, `${k === "ca" ? "الكالسيوم" : "الفوسفور"} ما زال منخفضاً – اطلب من الطبيب البيطري مكملاً.`)); });
+  if (R.caP !== null && R.caP < 1) T.push(T2("Calcium : phosphorus is below 1 : 1 – ask the vet (add calcium).", "نسبة الكالسيوم إلى الفوسفور أقل من 1 : 1 – استشر الطبيب البيطري (أضف كالسيوم)."));
+  T.push(T2("Fresh water and salt always available. If droppings get loose or the horse stops eating, go back one step and tell the vet.", "الماء النظيف والملح متوفران دائماً. إذا أصبح الروث ليّناً أو توقف الحصان عن الأكل، ارجع خطوة واحدة وأخبر الطبيب البيطري."));
+  return T;
+}
+function fdGradual(R, ong){
+  const pc = ong ? N(ong.feedKg) : null, ph = ong ? N(ong.hayKg) : null;
+  const nc = R.cmp.all.conc, nh = R.cmp.all.hay, gf = fdStep(pc, nc, "feed"), gh = fdStep(ph, nh, "hay"), types = [], lc = a => a.map(x => String(x).toLowerCase()).sort().join("+");
+  if (ong) { const cn = R.feeds.slice(1).filter(x => x.used > 0).map(x => x.name), hn = [R.feeds[0].name].filter(Boolean);
+    if (ong.feedNames.length && cn.length && lc(ong.feedNames) !== lc(cn)) types.push(T2("New feed type – mix it with the old feed: replace about 25% of the old feed every 2 days, full change in about 7 days.", "نوع علف جديد – اخلطه مع العلف القديم: استبدل نحو 25% من العلف القديم كل يومين، والتغيير الكامل خلال نحو 7 أيام."));
+    if (ong.hayNames.length && hn.length && lc(ong.hayNames) !== lc(hn)) types.push(T2("New hay type – mix it with the old hay: replace about 25% of the old hay every 2–3 days, full change in about 14 days.", "نوع دريس جديد – اخلطه مع الدريس القديم: استبدل نحو 25% من الدريس القديم كل 2–3 أيام، والتغيير الكامل خلال نحو 14 يوماً.")); }
+  const lines = [];
+  if (gf) lines.push(gf.d > 0 ? T2(`Feed (concentrate / pellet): +${fdF(gf.a, 2)} kg/day – add 0.25 kg per day for ${gf.days} days (${fdF(gf.oldKg, 2)} → ${fdF(gf.newKg, 2)} kg/day).`, `العلف (مركز / بليت): +${fdF(gf.a, 2)} كجم/يوم – أضف 0.25 كجم يومياً لمدة ${gf.days} أيام (${fdF(gf.oldKg, 2)} → ${fdF(gf.newKg, 2)} كجم/يوم).`)
+    : T2(`Feed (concentrate / pellet): −${fdF(gf.a, 2)} kg/day – reduce by about ${fdF(gf.step, 2)} kg per day over ${gf.days} days (${fdF(gf.oldKg, 2)} → ${fdF(gf.newKg, 2)} kg/day).`, `العلف (مركز / بليت): −${fdF(gf.a, 2)} كجم/يوم – أنقص نحو ${fdF(gf.step, 2)} كجم يومياً خلال ${gf.days} أيام (${fdF(gf.oldKg, 2)} → ${fdF(gf.newKg, 2)} كجم/يوم).`));
+  if (gh) { const last = gh.pts[gh.pts.length - 1].day; lines.push(T2(`Hay: ${gh.d > 0 ? "+" : "−"}${fdF(gh.a, 2)} kg/day – ${gh.d > 0 ? "add" : "reduce by"} about ${fdF(gh.step, 2)} kg every 2 days – full amount from day ${last} (${fdF(gh.oldKg, 2)} → ${fdF(gh.newKg, 2)} kg/day).`, `الدريس: ${gh.d > 0 ? "+" : "−"}${fdF(gh.a, 2)} كجم/يوم – ${gh.d > 0 ? "أضف" : "أنقص"} نحو ${fdF(gh.step, 2)} كجم كل يومين – الكمية الكاملة من اليوم ${last} (${fdF(gh.oldKg, 2)} → ${fdF(gh.newKg, 2)} كجم/يوم).`)); }
+  const maxD = Math.max(gf ? gf.days : 0, gh ? gh.days : 0), rows = [];
+  for (let dd = 1; dd <= maxD; dd++) rows.push([dd, gf ? fdgAt(gf, dd) : nc, gh ? fdgAt(gh, dd) : nh]);
+  return {pc, ph, nc, nh, gf, gh, lines:[...lines, ...types], rows, need:!!(gf || gh || types.length)};
+}
+function fdGradHTML(G, print){
+  const r = print ? ' style="text-align:right"' : ' class="num"';
+  const tb = G.rows.length ? `<table${print ? "" : ' class="fdtab"'} style="max-width:420px"><thead><tr><th>${esc(T2("Day", "اليوم"))}</th><th${r}>${esc(T2("Feed kg/day", "العلف كجم/يوم"))}</th><th${r}>${esc(T2("Hay kg/day", "الدريس كجم/يوم"))}</th></tr></thead><tbody>${G.rows.map(x => `<tr><td>${x[0]}</td><td${r}>${fdF(x[1], 2)}</td><td${r}>${fdF(x[2], 2)}</td></tr>`).join("")}</tbody></table>` : "";
+  const body = G.need ? `<p${print ? ' style="color:#b00"' : ' class="fdred"'}><b>⚠ ${esc(T2("Gradual adjustment needed", "يلزم تعديل تدريجي"))}</b> (${esc(T2("feed change more than 0.5 kg or hay change more than 2 kg per day", "تغيير العلف أكثر من 0.5 كجم أو الدريس أكثر من 2 كجم يومياً"))})</p>${tb}<p class="small">${esc(T2("If loose droppings, colic signs or poor appetite appear, hold the amount for 2–3 days before the next step.", "إذا ظهر روث ليّن أو علامات مغص أو ضعف شهية، ثبّت الكمية 2–3 أيام قبل الخطوة التالية."))}</p>`
+    : (G.pc === null && G.ph === null ? `<p class="small muted">${esc(T2("No ongoing ration for this horse – type the ration now being fed to see if a gradual change is needed.", "لا توجد عليقة حالية لهذا الحصان – اكتب العليقة المقدمة الآن لمعرفة إن كان يلزم تغيير تدريجي."))}</p>` : `<p class="small">${esc(T2("No gradual adjustment needed (feed change ≤ 0.5 kg and hay change ≤ 2 kg per day).", "لا يلزم تعديل تدريجي (تغيير العلف ≤ 0.5 كجم والدريس ≤ 2 كجم يومياً)."))}</p>`);
+  return `<div data-notr>${body}<p class="small muted">${esc(T2(FDG_REF, FDG_REF_AR))}</p></div>`;
+}
+function fdGradPanel(R){
+  const h = (S.horses || []).find(x => x._id === FD.hid), ong = fdOngoing(h), G = fdGradual(R, ong), t = (h && h.ongoing) || {};
+  const fl = [...feedsOf("Pellet"), ...feedsOf("Concentrate")], hl = feedsOf("Hay"), defF = (ong && ong.feedNames[0]) || (R.feeds[1] && R.feeds[1].name) || "", defH = (ong && ong.hayNames[0]) || R.feeds[0].name || "";
+  return `<div class="panel"><h3 style="margin-top:0">Ongoing ration – required – short / extra</h3>
+    <p class="small muted" style="margin:0 0 6px" data-notr>${esc(T2("Ongoing = what the horse eats now: ", "الحالي = ما يأكله الحصان الآن: "))}<b>${ong ? esc(ong.srcTxt) : esc(T2("no data – type it below", "لا توجد بيانات – اكتبها أدناه"))}</b>. ${esc(T2("It is taken from the last saved final plan, or typed here (kept in Horses Data) – whichever is newer.", "يؤخذ من آخر خطة نهائية محفوظة أو مما يُكتب هنا (يحفظ في بيانات الخيل) – أيهما أحدث."))}</p>
+    <div class="row" style="align-items:flex-end;flex-wrap:wrap"><label style="max-width:260px">Ongoing feed<select id="fdOgF">${fdOpt(fl, t.feed || defF, "— choose —")}</select></label><label style="max-width:150px">Feed kg/day<input id="fdOgFk" type="number" step="any" min="0" value="${esc(ong ? fdF(ong.feedKg, 2) : "")}"></label>
+      <label style="max-width:260px">Ongoing hay<select id="fdOgH">${fdOpt(hl, t.hay || defH, "— choose —")}</select></label><label style="max-width:150px">Hay kg/day<input id="fdOgHk" type="number" step="any" min="0" value="${esc(ong ? fdF(ong.hayKg, 2) : "")}"></label>
+      <button class="small pri" id="fdOgSave">Save ongoing</button>${h && h.ongoing ? '<button class="small" id="fdOgClr">Clear typed</button>' : ""}</div>
+    <div class="tbl" style="margin-top:8px">${fdOngTable(R, ong)}</div>
+    <p class="small muted" style="margin:4px 0 0" data-notr>${esc(T2("Required = this plan's requirement (feed and hay from the calculation basis; ME, Ca, P from body weight × feeding status – NRC 2007). Short / Extra = ongoing − required. Ongoing ME, Ca and P = feed + hay only, from the feed library.", "المطلوب = احتياج هذه الخطة (العلف والدريس من أساس الحساب؛ الطاقة والكالسيوم والفوسفور من وزن الجسم × حالة التغذية – NRC 2007). النقص / الزيادة = الحالي − المطلوب. الطاقة والكالسيوم والفوسفور للعليقة الحالية = العلف + الدريس فقط من مكتبة الأعلاف."))}</p>
+    <h4 style="margin:12px 0 4px">Gradual change</h4>${fdGradHTML(G)}
+    <h4 style="margin:12px 0 4px">Adjustment suggestions for the owner (printed)</h4><ul class="small" style="margin:0" data-notr>${fdOwnerTips(R, ong).map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+}
+// how each number is worked out – with the sources, so the data can be checked
+const FD_REFS = [
+  ["MSD Veterinary Manual – Feeding practices in horses (NRC 2007 based)", "https://www.msdvetmanual.com/management-and-nutrition/nutrition-horses/feeding-practices-in-horses-and-other-equids"],
+  ["University of Minnesota Extension – Estimating horse body weight (ideal-weight equations)", "https://extension.umn.edu/horse-health/estimating-horse-bodyweight"],
+  ["Agriculture Victoria – Condition scoring and weight estimation of horses", "https://agriculture.vic.gov.au/livestock-and-animals/horses/health-and-welfare/condition-scoring-and-weight-estimation"],
+  ["Ontario OMAFRA – Estimating body weight of horses", "https://www.ontario.ca/page/estimating-body-weight-horses"],
+  ["Kentucky Equine Research – Calculating body weight of foals", "https://ker.com/equinews/calculating-body-weight-foals/"],
+  ["PetMD – How much does a horse weigh (pony divisor 299)", "https://www.petmd.com/horse/how-much-does-a-horse-weigh"],
+  ["The Horse – Switching horse feeds safely (K. Janicki, 2018; NRC 2007)", "https://thehorse.com/148329/switching-horse-feeds-safely/"],
+  ["eXtension Horses – Changing the diet of horses", "https://horses.extension.org/changing-the-diet-of-horses/"],
+  ["Mad Barn – Equine Diet Transition Calculator", "https://madbarn.com/equine-diet-transition-calculator"],
+  ["Kentucky Equine Research – Body weight, wither height and growth rates in Thoroughbreds (Brown-Douglas & Pagan, 2009)", "https://ker.com/wp-content/uploads/Body-Weight-Wither-Height-and-Growth-Rates-in-Thoroughbreds-Raised-in-America-England-Australia-New-Zealand-and-India.pdf"],
+  ["MSD Veterinary Manual – Daily nutrient requirements of growing horses and ponies (NRC 2007)", "https://www.msdvetmanual.com/multimedia/table/estimated-daily-major-nutrient-requirements-of-growing-horses-and-ponies"],
+  ["University of Minnesota Extension – Feeding the weanling and yearling horse", "https://extension.umn.edu/horse-nutrition/feeding-weanling-and-yearling-horse"]];
+// the growth reference tables month by month – published values, and the average (straight line) between them where the source has no value.
+// This is exactly the curve the calculation uses (gbwFor), shown for the reference mature weight of each table.
+function fdGrowthRefTable(){
+  const t = (key, maxM) => { const G = GROWTH_REF[key], curve = gbwFor(key === "Pony" ? "Pony" : "Thoroughbred").pts, P = G.pts, first = P[0][0], last = P[P.length - 1][0];
+    const W = m => { const g = fdInterp(curve, "age_months", "pct_mature_BW", m); return g ? G.mature * g.y / 100 : null; };
+    const src = m => { if (P.some(x => x[0] === m)) return T2("published", "منشور");
+      if (m > first && m < last) { const lo = P.filter(x => x[0] < m).pop()[0], hi = P.find(x => x[0] > m)[0]; return T2(`average ${lo}–${hi} m`, `متوسط ${lo}–${hi} شهر`); }
+      return T2("growth table (NRC / KER %)", "جدول النمو (NRC / KER %)"); };
+    let rows = "";
+    for (let m = 0; m <= maxM; m++) { const w = W(m), w1 = W(m + 1), pub = G.adg && G.adg[m] !== undefined, d = pub ? G.adg[m] : (w !== null && w1 !== null ? (w1 - w) / 30.4375 : null);
+      const isPub = P.some(x => x[0] === m);
+      rows += `<tr${isPub ? ' style="font-weight:600"' : ""}><td>${m}</td><td class="num">${fdF(w, 1)}</td><td class="num">${w === null ? "" : fdF(w / G.mature * 100, 1)}</td><td class="num">${d === null ? "" : fdF(d, 2)}${pub ? "*" : ""}</td><td class="num">${d === null ? "" : fdF(d * 30.4375, 1)}</td><td class="small">${esc(src(m))}</td><td class="small">${esc(m < 12 ? T2("young", "صغير") : m < 60 ? T2("growing", "نامٍ") : T2("adult – no growth", "بالغ – لا نمو"))}</td></tr>`; }
+    return `<details style="margin-top:6px"><summary class="small"><b>${esc(T2(G.n, key === "Pony" ? "البوني" : "الثوروبريد"))}</b> – ${esc(T2("month by month, 0–" + maxM + " months", "شهراً بشهر، 0–" + maxM + " شهراً"))} · <a href="${esc(G.url)}" target="_blank" rel="noopener">${esc(G.src)}</a></summary>
+      <p class="small muted" style="margin:4px 0">${esc(T2(`Reference mature weight ${fdF(G.mature, 0)} kg. Bold rows = published values; other rows = average (straight line) between the published ages, or the growth table outside them. Daily gain = change to the next month ÷ 30.4${G.adg ? "; * = daily gain published by the source" : ""}. For a horse, the same curve is scaled to its own mature weight.`,
+        `وزن البلوغ المرجعي ${fdF(G.mature, 0)} كجم. الصفوف الغامقة = قيم منشورة؛ والصفوف الأخرى = متوسط (خط مستقيم) بين الأعمار المنشورة، أو جدول النمو خارجها. الزيادة اليومية = التغير إلى الشهر التالي ÷ 30.4${G.adg ? "؛ * = زيادة يومية منشورة في المصدر" : ""}. لكل حصان يُضبط المنحنى نفسه على وزن بلوغه.`))}</p>
+      <table class="fdtab" style="max-width:640px"><thead><tr><th>${esc(T2("Age (months)", "العمر (أشهر)"))}</th><th class="num">${esc(T2("Body weight kg", "وزن الجسم كجم"))}</th><th class="num">${esc(T2("% of mature", "% من وزن البلوغ"))}</th><th class="num">${esc(T2("Daily gain kg", "الزيادة اليومية كجم"))}</th><th class="num">${esc(T2("Monthly gain kg", "الزيادة الشهرية كجم"))}</th><th>${esc(T2("Source", "المصدر"))}</th><th>${esc(T2("Stage", "المرحلة"))}</th></tr></thead><tbody>${rows}</tbody></table></details>`; };
+  return `<p class="small" style="margin:10px 0 0"><b>${esc(T2("Growth reference – Thoroughbred and Pony (used in the calculation)", "مرجع النمو – الثوروبريد والبوني (مستخدم في الحساب)"))}</b></p>${t("Thoroughbred", 60)}${t("Pony", 60)}<p class="small muted" style="margin:4px 0 0">${esc(T2("Young (0–12 months) and growing (1–5 years): the standard follows the curve. Adult (5 years +): the standard stays at the mature weight – no growth gain.", "صغير (0–12 شهراً) ونامٍ (1–5 سنوات): يتبع القياسي المنحنى. بالغ (5 سنوات فأكثر): يبقى القياسي عند وزن البلوغ – لا زيادة نمو."))}</p>`;
+}
+function fdExplainHTML(){
+  const st = FST(), li = (h, t, ha, ta) => `<li><b>${esc(T2(h, ha))}</b> – ${esc(T2(t, ta))}</li>`, mx = st.DEFAULT_MATURE_BW || 500, lo = fdP(fdN(st.TOTAL_MIN_PCT)), hi = fdP(fdN(st.TOTAL_MAX_PCT)), me = st.ME_DE_FACTOR || 0.85, ml = fdP(fdN(st.MAX_CONC_PER_MEAL_PCT));
+  return `<details class="panel" data-notr><summary><b>${esc(T2("How it is calculated – explanation and references", "طريقة الحساب – الشرح والمراجع"))}</b> <span class="small muted">${esc(T2("(read to check the numbers and how reliable they are)", "(اقرأ للتحقق من الأرقام ومدى دقتها)"))}</span></summary>
+    <ol class="small" style="margin:8px 0 0;padding-left:20px;line-height:1.5">
+      ${li("Body weight (tape formula)", "(body length × heart girth × heart girth) in inches ÷ divisor = lbs; lbs ÷ 2.2 = kg. Divisor by horse type: adult light horse 330, pony 299, yearling 301, weanling 280–290 (285 used). Young foal: heart girth in metres³ × 90 = kg. These are estimates; a weighbridge is the most accurate.",
+        "وزن الجسم (معادلة الشريط)", "(طول الجسم × محيط الصدر × محيط الصدر) بالإنش ÷ القاسم = رطل؛ الرطل ÷ 2.2 = كجم. القاسم حسب نوع الحصان: حصان خفيف بالغ 330، بوني 299، حولي 301، مفطوم 280–290 (المستخدم 285). المهر الصغير: (محيط الصدر بالمتر)³ × 90 = كجم. هذه تقديرات؛ الميزان هو الأدق.")}
+      ${li("Standard BWT (breed · age · height)", `Adult standard: typed value, or University of Minnesota ideal-weight equation for the breed type (needs height and body length), or, with height only, the Agriculture Victoria weight-by-height table (moderate condition). Growing horse: mature height = height ÷ % of mature height for age; standard = mature weight × % of mature weight for age (growth tables in Feeds, status & standards). Within ±${BWT_TOL} kg of the standard = OK; more = Over wt; less = Under wt. With no height, ${mx} kg is used as the adult weight.`,
+        "الوزن القياسي (السلالة · العمر · الارتفاع)", `القياسي للبالغ: القيمة المكتوبة، أو معادلة الوزن المثالي من جامعة مينيسوتا لنوع السلالة (تحتاج الارتفاع وطول الجسم)، أو بالارتفاع فقط جدول Agriculture Victoria للوزن حسب الارتفاع (حالة جسم متوسطة). الحصان النامي: الارتفاع عند البلوغ = الارتفاع ÷ نسبة الارتفاع للعمر؛ القياسي = وزن البلوغ × نسبة الوزن للعمر (جداول النمو في الأعلاف والحالات والمعايير). ضمن ±${BWT_TOL} كجم من القياسي = مناسب؛ أكثر = وزن زائد؛ أقل = وزن ناقص. بدون ارتفاع يستخدم ${mx} كجم كوزن للبالغ.`)}
+      ${li("Growth reference (young horses)", "Thoroughbred: body weight by age from Kentucky Equine Research (Kentucky Thoroughbreds, 0–18 months); the curve is used as % of a reference mature weight (18-month weight ÷ 0.80). Pony: MSD Veterinary Manual / NRC 2007 table for ponies of 200 kg adult weight (4–24 months). The curve is scaled to this horse's own mature weight, so a bigger or smaller horse of the breed gets its own standard. Daily gain = the change between table points; monthly gain = daily × 30.4. Other breeds and ages: the growth table in Feeds, status & standards.",
+        "مرجع النمو (الخيول الصغيرة)", "الثوروبريد: وزن الجسم حسب العمر من Kentucky Equine Research (خيول كنتاكي، 0–18 شهراً)؛ يستخدم المنحنى كنسبة من وزن بلوغ مرجعي (وزن 18 شهراً ÷ 0.80). البوني: جدول دليل MSD البيطري / NRC 2007 للبوني بوزن بلوغ 200 كجم (4–24 شهراً). يُضبط المنحنى على وزن البلوغ لهذا الحصان، فيأخذ الحصان الأكبر أو الأصغر من السلالة معياره الخاص. الزيادة اليومية = الفرق بين نقاط الجدول؛ الزيادة الشهرية = اليومية × 30.4. السلالات والأعمار الأخرى: جدول النمو في الأعلاف والحالات والمعايير.")}
+      ${li("Total feed per day", `Body weight × % of BW (dry matter) by body condition score or feeding status (Feeds, status & standards). Allowed range ${lo}–${hi} of BW (MSD). Split by the ratio hay : concentrate. Kg as fed = kg DM ÷ DM %.`,
+        "إجمالي العلف اليومي", `وزن الجسم × نسبة من الوزن (مادة جافة) حسب درجة حالة الجسم أو حالة التغذية. المدى المسموح ${lo}–${hi} من وزن الجسم (MSD). يقسم حسب نسبة الدريس : المركز. الكجم كما يقدم = كجم المادة الجافة ÷ نسبة المادة الجافة.`)}
+      ${li("Requirement (Required)", `DE, CP, Ca, P, lysine = body weight × the factor of the feeding status (NRC 2007, as given in the MSD Veterinary Manual). ME is an estimate = DE × ${me} (NRC uses DE). Required feed and hay = the amounts of this plan's calculation basis.`,
+        "الاحتياج (المطلوب)", `الطاقة المهضومة والبروتين والكالسيوم والفوسفور والليسين = وزن الجسم × معامل حالة التغذية (NRC 2007 كما في دليل MSD البيطري). الطاقة الممثلة ME تقديرية = DE × ${me} (NRC يستخدم DE). العلف والدريس المطلوبان = كميات أساس الحساب لهذه الخطة.`)}
+      ${li("Supplied", "For every feed: kg DM × nutrient per kg DM from the feed library. Ca and P (g) = kg DM × % × 10. Feed values are from Feedipedia, NRC tables and the bag label – a hay analysis makes them more exact, because hay varies by cut and season.",
+        "المقدم", "لكل علف: كجم المادة الجافة × العنصر لكل كجم مادة جافة من مكتبة الأعلاف. الكالسيوم والفوسفور (غ) = كجم المادة الجافة × % × 10. قيم الأعلاف من Feedipedia وجداول NRC وملصق الكيس – تحليل الدريس يجعلها أدق لأن الدريس يختلف حسب الحشة والموسم.")}
+      ${li("Ongoing", "What the horse eats now: the last saved final plan, or the feed and hay typed in the Ration calculator (whichever is newer). Its ME, Ca and P are worked out from the feed library in the same way (feed + hay only). Blank if there is no data.",
+        "الحالي", "ما يأكله الحصان الآن: آخر خطة نهائية محفوظة، أو العلف والدريس المكتوبان في حاسبة العليقة (أيهما أحدث). تحسب الطاقة والكالسيوم والفوسفور من مكتبة الأعلاف بالطريقة نفسها (العلف + الدريس فقط). يبقى فارغاً إذا لم توجد بيانات.")}
+      ${li("Short / Extra", "Ongoing − Required for feed kg, hay kg, ME, Ca and P. Negative = short, positive = extra.",
+        "النقص / الزيادة", "الحالي − المطلوب لكجم العلف وكجم الدريس والطاقة والكالسيوم والفوسفور. السالب = نقص، والموجب = زيادة.")}
+      ${li("Supplements", "Only for what the feeds leave short: P from dicalcium phosphate (18.5% P), then Ca from limestone (38% Ca), lysine from L-lysine HCl (78%), methionine from DL-methionine (99%). Your own extra supplement adds its typed Ca % and P % × g/day.",
+        "المكملات", "فقط لما تتركه الأعلاف ناقصاً: الفوسفور من فوسفات ثنائي الكالسيوم (18.5% فوسفور)، ثم الكالسيوم من الحجر الجيري (38% كالسيوم)، والليسين من L-lysine HCl (78%)، والميثيونين من DL-methionine (99%). المكمل الإضافي الخاص بك يضيف الكالسيوم % والفوسفور % المكتوبين × غ/يوم.")}
+      ${li("Meals", `Concentrate per meal not more than ${ml} of BW (MSD).`, "الوجبات", `المركز في الوجبة لا يزيد عن ${ml} من وزن الجسم (MSD).`)}
+      ${li("Gradual change", "Feed up more than 0.5 kg: add 0.25 kg per day. Feed down more than 0.5 kg: equal steps over 7 days (14 days if more than 2 kg). Hay change more than 2 kg: a quarter of the change every 2 days. New feed: replace 25% every 2 days (about 7 days); new hay: about 14 days.",
+        "التغيير التدريجي", "زيادة العلف أكثر من 0.5 كجم: أضف 0.25 كجم يومياً. إنقاص العلف أكثر من 0.5 كجم: خطوات متساوية خلال 7 أيام (14 يوماً إذا كان أكثر من 2 كجم). تغيير الدريس أكثر من 2 كجم: ربع الفرق كل يومين. علف جديد: استبدل 25% كل يومين (نحو 7 أيام)؛ دريس جديد: نحو 14 يوماً.")}
+    </ol>
+    ${fdGrowthRefTable()}
+    <p class="small" style="margin:8px 0 4px"><b>${esc(T2("References", "المراجع"))}</b></p><ul class="small" style="margin:0;padding-left:20px">${FD_REFS.map(([t, u]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a></li>`).join("")}</ul>
+    <p class="small muted" style="margin:6px 0 0">${esc(T2("All results are estimates for planning; the veterinarian decides the final ration.", "كل النتائج تقديرات للتخطيط؛ والطبيب البيطري يقرر العليقة النهائية."))}</p></details>`;
 }
 function fdDrawRes(R){
   const box = $("#fdRes"); if (!box) return;
@@ -1646,6 +1921,7 @@ function fdDrawRes(R){
     ${R.caP !== null ? `<p class="small">Ca : P supplied = <b${R.caP < 1 ? ' class="fdred"' : ""}>${fdF(R.caP, 2)} : 1</b> (must be above 1:1, about 1.5:1 desirable – MSD)</p>` : ""}
     <div class="row" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)"><b class="small">Download Required vs supplied</b><span class="small muted">horse, body score, feeding status, body weight, every feed / hay / supplement (standard vs supplied) and DM, DE, ME, CP, Ca, P, lysine, methionine</span><span class="spacer"></span><button class="pri" id="fdRvsX">⬇ Download Excel</button><button id="fdRvsP">⬇ Download PDF</button></div></div>
   ${fdAdvPanel(R)}
+  ${fdGradPanel(R)}
   <div class="panel"><h3 style="margin-top:0">5. Standard chart for this horse</h3>
     <div class="kv">
       <div>Feeding status</div><div>${esc(R.inp.status || "")}</div>
@@ -1664,6 +1940,7 @@ function fdDrawRes(R){
       <div>Source</div><div class="small">${sr ? esc(sr.source || "") : ""}${sr && sr.notes ? " – " + esc(sr.notes) : ""}</div>
     </div>
     <p class="small" style="margin:8px 0 0;padding:6px 8px;background:var(--soft);border-radius:6px"><b>Units:</b> 1 Mcal = 4.184 MJ · 1 MJ = 239 kcal · 1 Mcal = 1000 kcal</p></div>
+  ${fdExplainHTML()}
   <div class="panel"><h3 style="margin-top:0">6. Save</h3>
     <label>Notes<input id="fd_notes" value="${esc(P.notes || "")}" placeholder="e.g. split concentrate into 3 meals"></label>
     <div class="row" style="margin-top:10px"><button id="fdPrint">🖨 Print / PDF</button><span class="spacer"></span><button id="fdDraft">Save draft</button><button class="pri" id="fdFinal">Save final</button></div>
@@ -1672,8 +1949,16 @@ function fdDrawRes(R){
   $("#fdReset").onclick = () => { FD.plan.adj = {}; render(true); };
   $("#fdRvsX").onclick = () => fdRvsXlsx(R); $("#fdRvsP").onclick = () => fdRvsPrint(R);
   box.querySelectorAll("[data-fdxs]").forEach(b => b.onclick = () => { const k = b.dataset.fdxs, s = new Set(fdXOn(FD.plan)); if (s.has(k)) s.delete(k); else s.add(k); FD.plan.xs = Object.keys(FD_X).filter(x => s.has(x)); delete FD.plan.adj["x" + k]; render(true); });
+  { const setXc = f => { const a = (Array.isArray(FD.plan.xc) ? FD.plan.xc : []).map(x => Object.assign({}, x)); f(a); FD.plan.xc = a; Object.keys(FD.plan.adj).forEach(k => { if (/^xc/.test(k)) delete FD.plan.adj[k]; }); render(true); };
+    box.querySelectorAll("[data-xcadd]").forEach(b => b.onclick = () => setXc(a => a.push({name:"", g:"", ca:"", p:""})));
+    box.querySelectorAll("[data-xcd]").forEach(b => b.onclick = () => setXc(a => a.splice(+b.dataset.xcd, 1)));
+    [["xcn","name"],["xcg","g"],["xcc","ca"],["xcp","p"]].forEach(([d, k]) => box.querySelectorAll(`[data-${d}]`).forEach(el => el.onchange = () => setXc(a => { a[+el.dataset[d]][k] = k === "name" ? el.value.trim() : (N(el.value) ?? ""); }))); }
   box.querySelectorAll("[data-fdapply]").forEach(b => b.onclick = () => { const [k, v] = b.dataset.fdapply.split(":"); FD.plan.adj[k] = +v; render(true); });
   $("#fd_notes").onchange = e => { FD.plan.notes = e.target.value; };
+  { const og = $("#fdOgSave"); if (og) og.onclick = async () => { const h = (S.horses || []).find(x => x._id === FD.hid); if (!h) return; const fk = N($("#fdOgFk").value), hk2 = N($("#fdOgHk").value);
+      if (fk === null && hk2 === null) { toast("Type the feed and / or hay kg per day."); return; }
+      await saveHorseFields(h, {ongoing:{feed:$("#fdOgF").value, feedKg:fk ?? "", hay:$("#fdOgH").value, hayKg:hk2 ?? "", date:new Date().toISOString(), by:USER_EMAIL || ""}}); toast("Ongoing ration saved to Horses Data."); };
+    const oc = $("#fdOgClr"); if (oc) oc.onclick = async () => { const h = (S.horses || []).find(x => x._id === FD.hid); if (!h) return; await saveHorseFields(h, {ongoing:null}); toast("Typed ongoing ration cleared."); }; }
   $("#fdDraft").onclick = () => fdSave("Draft"); $("#fdFinal").onclick = () => fdSave("Final");
   $("#fdPrint").onclick = () => fdPrint(R);
 }
@@ -1681,7 +1966,7 @@ function fdDrawRes(R){
 function fdRecord(h, inp, plan, R, status){
   return {horseId:h._id, pid:h.pid || "", name:h.name || "", nameEn:h.nameEn || "", savedAt:new Date().toISOString(), date:today(), status, by:USER_EMAIL || "",
     inp:{bw:inp.bw ?? null, bcs:inp.bcs ?? null, status:inp.status || "", height:inp.height ?? null, matureBw:inp.matureBw ?? null},
-    plan:{basis:fdBasisOf(plan), ratio:plan.ratio, mode:plan.mode, conc1:plan.conc1 || "", conc2:"", concs:plan.mode === "both" ? fdConcs(plan).filter(c => c.name).map(c => ({name:c.name, part:c.part ?? ""})) : [], share:plan.share, hay:plan.hay || "", hays:fdHays(plan).filter(x => x.name).map(x => ({name:x.name, part:x.part ?? ""})), hayPart:plan.hayPart ?? "", xs:fdXOn(plan), override:plan.override ?? "", adj:plan.adj || {}, notes:plan.notes || ""},
+    plan:{basis:fdBasisOf(plan), ratio:plan.ratio, mode:plan.mode, conc1:plan.conc1 || "", conc2:"", concs:plan.mode === "both" ? fdConcs(plan).filter(c => c.name).map(c => ({name:c.name, part:c.part ?? ""})) : [], share:plan.share, hay:plan.hay || "", hays:fdHays(plan).filter(x => x.name).map(x => ({name:x.name, part:x.part ?? ""})), hayPart:plan.hayPart ?? "", xs:fdXOn(plan), xc:(Array.isArray(plan.xc) ? plan.xc : []).filter(x => x && (x.name || N(x.g) !== null)).map(x => ({name:x.name || "", g:x.g ?? "", ca:x.ca ?? "", p:x.p ?? ""})), override:plan.override ?? "", adj:plan.adj || {}, notes:plan.notes || ""},
     res:{pctBW:R.pct ?? null, totalDM:R.totalDM, hayKg:R.cmp.all.hay, concKg:R.cmp.all.conc, totalKg:R.cmp.all.total, reqME:R.req ? R.req.me : null, supME:R.cmp.all.me, reqCP:R.req ? R.req.cp : null, supCP:R.cmp.all.cp,
       supplements:suppText(R), flags:Object.entries(R.flag).filter(([, v]) => fdBad(v)).map(([k, v]) => (FD_FLAGN[k] || k) + ": " + v).join("; ")}};
 }
@@ -1694,13 +1979,17 @@ async function fdSave(status){
   await saveHorseFields(h, {feedPlan:Object.assign({}, rec.plan, {status, savedAt:rec.savedAt})});
   toast(status === "Final" ? "Feeding plan saved (final)." : "Feeding plan saved as draft.");
 }
-function fdPrint(R){
-  const h = (S.horses || []).find(x => x._id === FD.hid) || {}, P = FD.plan, c = R.cmp, F = R.flag;
+function fdPrintBlock(h, P, R){
+  const c = R.cmp, F = R.flag, ong = fdOngoing(h);
   const it = x => `<tr><td>${esc(x.label)}</td><td>${esc(x.name)}</td><td style="text-align:right">${x.grams ? fdF(x.used * 1000, 0) + " g" : fdF(x.used, 2) + " kg"}</td><td style="text-align:right">${fdF(x.me, 1)}</td><td style="text-align:right">${fdF(x.cp, 0)}</td><td style="text-align:right">${fdF(x.ca, 1)}</td></tr>`;
   const r = (l, o) => `<tr><td>${esc(l)}</td><td style="text-align:right">${fdF(o.dm, 2)}</td><td style="text-align:right">${fdF(o.me, 1)}</td><td style="text-align:right">${fdF(o.cp, 0)}</td><td style="text-align:right">${fdF(o.ca, 1)}</td><td style="text-align:right">${fdF(o.p, 1)}</td><td style="text-align:right">${fdF(o.lys, 1)}</td><td style="text-align:right">${fdP(o.pbw, 2)}</td><td style="text-align:right">${fdP(o.rough, 0)}</td></tr>`;
-  const bad = Object.entries(F).filter(([, v]) => fdBad(v));
-  const inner = `<h1>Feeding plan – ${esc(fdHName(h))}</h1>
-    <p>${h.pid ? "ID " + esc(h.pid) + " · " : ""}${esc(dshow(today()))} · Body weight ${esc(fdF(R.inp.bw, 0))} kg · BCS ${esc(R.inp.bcs ?? "")} ${esc(R.bcsClass)} · ${esc(R.inp.status)}</p>
+  const bad = Object.entries(F).filter(([, v]) => fdBad(v)), G = fdGradual(R, ong);
+  const rat = String(P.ratio || "").split(":");
+  return `<h1>Feeding plan – ${esc(fdHName(h))}</h1>
+    <table><tbody><tr><th style="text-align:left">Name</th><td>${esc(fdHName(h))}${h.pid ? " · ID " + esc(h.pid) : ""}</td><th style="text-align:left">Feeding status</th><td>${esc(R.inp.status || "")}</td><th style="text-align:left">Ratio of feed : hay</th><td data-notr>${rat.length === 2 ? esc(rat[1].trim() + " : " + rat[0].trim()) : esc(P.ratio || "")} (${esc(T2("hay", "الدريس"))} ${esc(rat[0] || "")}%)</td></tr></tbody></table>
+    <p>${h.pid ? "ID " + esc(h.pid) + " · " : ""}${esc(dshow(today()))} · <span data-notr>${(() => { const sb = bwtStd({dob:R.inp.dob, heightCm:R.inp.height, lengthIn:h.lengthIn, breed:h.breed, matureBw:R.inp.matureBw}), bw = fdF(R.inp.bw, 0);
+      return esc(T2("Body weight " + bw + " kg", "وزن الجسم " + bw + " كجم") + (sb.std ? T2(" (Standard BWT " + fdF(sb.std, 0) + " kg – ", " (الوزن القياسي " + fdF(sb.std, 0) + " كجم – ") + (bwtTxt(R.inp.bw, sb.std) || "") + ")" : "")); })()}</span> · BCS ${esc(R.inp.bcs ?? "")} ${esc(R.bcsClass)} · ${esc(R.inp.status)}</p>
+    <h3 style="margin:10px 0 4px" data-notr>${esc(T2("Ongoing – required – short / extra (per day)", "الحالي – المطلوب – النقص / الزيادة (يومياً)"))}</h3>${fdOngTable(R, ong, true)}
     <p>Basis ${esc(R.basis)} · Ratio hay : concentrate ${esc(P.ratio)} · Hay: ${esc(R.feeds[0].name || P.hay)} · Concentrate: ${R.concList.map(c => esc(c.name) + " " + fdP(c.w, 0)).join(" + ")} · Total feed ${fdP(R.planPct, 2)} of BW (DM) = ${fdF(R.totalDM, 2)} kg DM/day</p>
     <p>Hay per day ${fdF(R.lim.hayMinAF, 2)}–${fdF(R.lim.hayMaxAF, 2)} kg · Concentrate per day ${fdF(R.lim.concMinAF, 2)}–${fdF(R.lim.concMaxAF, 2)} kg (as fed)</p>
     <table><thead><tr><th>Item</th><th>Feed</th><th style="text-align:right">Per day (as fed)</th><th style="text-align:right">ME MJ</th><th style="text-align:right">CP g</th><th style="text-align:right">Ca g</th></tr></thead><tbody>${[...fdSplitHay(R.feeds, R), ...R.supps.filter(x => x.used > 0)].map(it).join("")}</tbody></table>
@@ -1708,9 +1997,26 @@ function fdPrint(R){
     <table><thead><tr><th></th><th style="text-align:right">DM kg</th><th style="text-align:right">ME MJ</th><th style="text-align:right">CP g</th><th style="text-align:right">Ca g</th><th style="text-align:right">P g</th><th style="text-align:right">Lysine g</th><th style="text-align:right">DM % BW</th><th style="text-align:right">Roughage %</th></tr></thead>
     <tbody>${R.req ? r("Required / standard", c.req) : ""}${r("Supplied", c.all)}</tbody></table>
     ${bad.length ? `<p style="color:#b00"><b>Check:</b> ${bad.map(([k, v]) => esc((FD_FLAGN[k] || k) + ": " + v)).join(" · ")}</p>` : "<p>All values within the standard.</p>"}
-    ${fdAdvice(R).length ? `<p><b>Balance suggestions:</b></p><ul>${fdAdvice(R).map(a => `<li><b>${esc(a.head)}</b>: ${a.tips.map(t => t.t).join(" ")}</li>`).join("")}</ul>` : ""}
-    ${P.notes ? `<p><b>Notes:</b> ${esc(P.notes)}</p>` : ""}<p style="margin-top:30px">Veterinarian Doctor: ____________________</p>`;
-  openPrint(docPage("Feeding plan " + fdHName(h), inner));
+    <p data-notr><b>${esc(T2("Adjustment suggestions:", "اقتراحات التعديل:"))}</b></p><ul data-notr>${fdOwnerTips(R, ong).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+    ${P.notes ? `<p><b>Notes:</b> ${esc(P.notes)}</p>` : ""}${G.need ? `<h3>Gradual change of ration</h3>${fdGradHTML(G, true)}` : ""}<p style="margin-top:30px">Veterinarian Doctor: ____________________</p>`;
+}
+function fdPrint(R){
+  const h = (S.horses || []).find(x => x._id === FD.hid) || {};
+  openPrint(docPage("Feeding plan " + fdHName(h), fdPrintBlock(h, FD.plan, R)));
+}
+// the plan of a horse for printing: the one open in the calculator, else its saved plan, else its feeding-status group
+function fdPlanFor(h){
+  if (FD && FD.hid === h._id) return {inp:FD.inp, P:FD.plan};
+  const inp = fdInputs(h), fp = h.feedPlan;
+  const P = fp ? Object.assign(fdDefaults(), fp, {adj:Object.assign({}, fp.adj || {})}) : Object.assign(fdDefaults(), (typeof FD_GRP !== "undefined" && FD_GRP[inp.status]) || {});
+  return {inp, P};
+}
+function fdFormPrint(sel){
+  const hs = sel === "all" ? fdHorses() : (S.horses || []).filter(h => h._id === sel); if (!hs.length) { toast("Choose a horse."); return; }
+  const parts = hs.map(h => { const {inp, P} = fdPlanFor(h), R = feedCalc(inp, P), nd = fdNoData(inp).filter(x => x !== "Height");
+    if (nd.length || R.missing.length) return `<h1>Feeding plan – ${esc(fdHName(h))}</h1><p style="color:#b00">${esc(nd.length ? nd.join(", ") + ": " + FD_NOD : "To calculate, add: " + R.missing.join(", "))}</p>`;
+    return fdPrintBlock(h, P, R); });
+  openPrint(docPage(sel === "all" ? "Feeding formulation – all horses" : "Feeding formulation " + fdHName(hs[0]), parts.join('<div style="break-before:page"></div>')));
 }
 
 /* ---------- 2. all horses summary ---------- */
@@ -1911,13 +2217,36 @@ function fdSavedView(body){
   body.innerHTML = `<div class="panel"><div class="row"><input id="fdQ" placeholder="Filter by horse, status, feed…" value="${esc(FD_Q)}" style="max-width:280px"><span class="small muted">${shown.length} plan(s)</span></div>
     <div class="tbl" style="margin-top:8px"><table class="fdtab"><thead><tr><th>Saved</th><th>Horse</th><th>Plan</th><th>Feeding status</th><th class="num">BWT</th><th>Ratio</th><th>Hay</th><th>Concentrate</th><th class="num">Total kg as fed</th><th class="num">ME req / supplied</th><th class="num">CP req / supplied</th><th>Supplements</th><th>Checks</th><th></th></tr></thead>
     <tbody>${shown.map(r => { const s = r.res || {}, p = r.plan || {}, i = r.inp || {};
-      return `<tr><td>${esc(dshow(r.date || String(r.savedAt || "").slice(0, 10)))}</td><td><b class="ar">${esc([r.name, r.nameEn].filter(Boolean).join(" / ") || r.pid)}</b></td><td><span class="pill ${r.status === "Final" ? "p-ok" : "p-n"}">${esc(r.status || "")}</span></td>
+      return `<tr><td>${esc(dshow(r.date || String(r.savedAt || "").slice(0, 10)))}</td><td><b class="ar">${esc([r.name, r.nameEn].filter(Boolean).join(" / ") || r.pid)}</b></td><td><span class="pill ${r.status === "Final" ? "p-ok" : "p-n"}">${esc(r.status || "")}</span>${r.reviewedAt ? `<br><span class="small" style="color:var(--ok,#1a7f37)">✓ Reviewed ${esc(dshow(String(r.reviewedAt).slice(0, 10)))}</span>` : ""}</td>
         <td>${esc(i.status || "")}</td><td class="num">${esc(i.bw ?? "")}</td><td>${esc(p.ratio || "")}</td><td>${esc([p.hay, ...fdHays(p).map(x => x.name)].filter(Boolean).join(" + "))}</td><td>${esc([p.conc1, ...(p.mode === "both" ? fdConcs(p).map(c => c.name) : [])].filter(Boolean).join(" + "))}</td><td class="num">${fdF(s.totalKg, 2)}</td>
         <td class="num">${fdF(s.reqME, 0)} / ${fdF(s.supME, 0)}</td><td class="num">${fdF(s.reqCP, 0)} / ${fdF(s.supCP, 0)}</td><td class="small">${esc(s.supplements || "")}</td><td class="small${s.flags ? " fdred" : ""}">${esc(s.flags || "OK")}</td>
-        <td style="white-space:nowrap"><button class="small" data-fdo="${esc(r._id)}">Open</button> <button class="small danger" data-fdd="${esc(r._id)}">Delete</button></td></tr>`; }).join("") || `<tr><td colspan="14" class="muted">No saved plans yet – use Save draft / Save final in the Ration calculator.</td></tr>`}</tbody></table></div></div>`;
+        <td style="white-space:nowrap"><button class="small" data-fdo="${esc(r._id)}">Open</button> <button class="small" data-fdr="${esc(r._id)}">Review</button> <button class="small danger" data-fdd="${esc(r._id)}">Delete</button></td></tr>`; }).join("") || `<tr><td colspan="14" class="muted">No saved plans yet – use Save draft / Save final in the Ration calculator.</td></tr>`}</tbody></table></div></div>`;
   $("#fdQ").addEventListener("input", e => { FD_Q = e.target.value; const p = e.target.selectionStart; render(true); const n = $("#fdQ"); if (n) { n.focus(); n.setSelectionRange(p, p); } });
   body.querySelectorAll("[data-fdo]").forEach(b => b.onclick = () => fdOpenPlan(b.dataset.fdo));
+  body.querySelectorAll("[data-fdr]").forEach(b => b.onclick = () => fdReviewPlan(b.dataset.fdr));
   body.querySelectorAll("[data-fdd]").forEach(b => b.onclick = () => confirmBox("Delete this saved feeding plan?", async () => { await W(() => db.doc("feedingPlans/" + b.dataset.fdd).delete()); toast("Deleted."); }));
+}
+// review a saved plan: the saved record is shown as it is (not changed) and marked "reviewed" with the date
+function fdReviewPlan(id){
+  const r = (S.feedPlans || []).find(x => x._id === id); if (!r) return;
+  const s = r.res || {}, p = r.plan || {}, i = r.inp || {}, rv = Array.isArray(r.reviews) ? r.reviews : [];
+  const kv = (l, v) => v === undefined || v === null || v === "" ? "" : `<div>${esc(l)}</div><div>${esc(v)}</div>`;
+  modal(`<h2>Review saved plan – <span class="ar">${esc([r.name, r.nameEn].filter(Boolean).join(" / ") || r.pid)}</span></h2>
+    <div class="kv">${kv("Saved", dshow(r.date || String(r.savedAt || "").slice(0, 10)) + (r.by ? " · " + r.by : ""))}${kv("Plan", r.status)}${kv("Feeding status", i.status)}${kv("Body weight (kg)", i.bw)}${kv("Body condition score", i.bcs)}${kv("Height", i.height ? heightShow(i.height) : "")}
+      ${kv("Ratio hay : concentrate", p.ratio)}${kv("Hay", [p.hay, ...fdHays(p).map(x => x.name)].filter(Boolean).join(" + "))}${kv("Concentrate", [p.conc1, ...(p.mode === "both" ? fdConcs(p).map(c => c.name) : [])].filter(Boolean).join(" + "))}
+      ${kv("Total feed % BW (DM)", s.pctBW !== null && s.pctBW !== undefined ? fdP(s.pctBW, 2) : "")}${kv("Hay kg/day (as fed)", fdF(s.hayKg, 2))}${kv("Concentrate kg/day (as fed)", fdF(s.concKg, 2))}${kv("Total kg/day (as fed)", fdF(s.totalKg, 2))}
+      ${kv("ME required / supplied (MJ)", fdF(s.reqME, 0) + " / " + fdF(s.supME, 0))}${kv("CP required / supplied (g)", fdF(s.reqCP, 0) + " / " + fdF(s.supCP, 0))}${kv("Supplements", s.supplements)}${kv("Extra supplements", (p.xc || []).map(x => x.name + " " + x.g + " g").join(", "))}${kv("Checks", s.flags || "OK")}${kv("Notes", p.notes)}</div>
+    ${rv.length ? `<h3 style="margin:12px 0 4px">Reviews</h3><ul class="small" style="margin:0">${rv.map(x => `<li>${esc(dshow(String(x.date || "").slice(0, 10)))}${x.by ? " · " + esc(x.by) : ""}${x.note ? " – " + esc(x.note) : ""}</li>`).join("")}</ul>` : ""}
+    <label style="margin-top:10px">Review note (optional)<input id="fdRvNote" placeholder="e.g. checked with owner, keep plan"></label>
+    <p class="small muted">The saved plan is kept as it is. To change it, use Open (edit) and save again.</p>
+    <div class="row" style="margin-top:10px"><button data-act="open">Open (edit)</button><span class="spacer"></span><button data-act="close">Close</button><button class="pri" data-act="rev">✓ Save as reviewed (${esc(dshow(today()))})</button></div>`, async (act, close) => {
+    if (act === "close") return close();
+    if (act === "open") { close(); return fdOpenPlan(id); }
+    if (act === "rev") { const note = ($("#fdRvNote") || {}).value || "", old = {}; Object.entries(r).forEach(([k, v]) => { if (!k.startsWith("_")) old[k] = v; });
+      const at = new Date().toISOString();
+      await W(() => db.doc("feedingPlans/" + id).set({...old, reviewedAt:at, reviewedBy:USER_EMAIL || "", reviews:[...rv, {date:at, by:USER_EMAIL || "", note:note.trim()}]}));
+      close(); toast("Saved as reviewed – " + dshow(today()) + "."); }
+  });
 }
 function fdOpenPlan(id){
   const r = (S.feedPlans || []).find(x => x._id === id); if (!r) return;
@@ -2705,7 +3034,7 @@ function homeWire(main){
   const root = $("#homeRoot"); if (!root) return;
   bindPat($("#homeRecent"));
   const fi = $("#homeFind"), fr = $("#homeFindRes");
-  if (fi && fr) { const wireRes = () => { fr.querySelectorAll("[data-hz]").forEach(b => b.onclick = () => showHorseCard(b.dataset.hz));
+  if (fi && fr) { const wireRes = () => { fr.querySelectorAll("[data-hz]").forEach(b => b.onclick = () => horseHub(b.dataset.hz));
     fr.querySelectorAll("[data-gs]").forEach(b => b.onclick = () => { const g = $("#gsq"); if (g) { g.value = b.dataset.gs; g.focus(); g.dispatchEvent(new Event("input", {bubbles:true})); } }); };
   fi.addEventListener("input", () => { HOME_Q = fi.value; fr.innerHTML = homeFindHTML(HOME_Q); wireRes(); }); wireRes(); }
   const ins = root.querySelector('[data-hm="install"]'); if (ins) ins.onclick = e => { e.preventDefault(); const n = $("#navInstall"); if (n) n.click(); };
@@ -3316,7 +3645,7 @@ function saveFile(name, data){
   if (!dl) { toast("Downloading is not available here."); return Promise.resolve(); }
   return dl.save({filename:name, data}).catch(e => { if (e && e.code !== "declined") toast("Download failed."); });
 }
-function toCSV(rows){ return "﻿" + rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(",")).join("\r\n"); }
+function toCSV(rows, raw){ if (!raw && LMODE() !== "en") rows = rows.map(r => r.map(LTX)); return "﻿" + rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(",")).join("\r\n"); }
 const CRC_T = (() => { const t = new Uint32Array(256); for (let n=0;n<256;n++){ let c=n; for (let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
 function crc32(u){ let c = 0xFFFFFFFF; for (let i=0;i<u.length;i++) c = CRC_T[(c^u[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
 function zipStore(files){ // [{name, data:string}] -> Uint8Array zip (stored, no compression)
@@ -3336,7 +3665,11 @@ function zipStore(files){ // [{name, data:string}] -> Uint8Array zip (stored, no
 }
 function xmlEsc(v){ return String(v ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function colName(i){ let s = ""; i++; while (i) { const m = (i-1) % 26; s = String.fromCharCode(65+m) + s; i = Math.floor((i-1)/26); } return s; }
-function makeXlsx(sheets){ // [{name, rows:[[...]]}] – first row is the bold header
+// text of a download in the chosen language (saved data are not changed – only this copy); raw = keep as it is (backup)
+const LTX = v => { if (typeof v !== "string" || !v || LMODE() === "en" || !window.LANG) return v; try { return v.split("\n").map(l => window.LANG.text(l)).join("\n"); } catch(e) { return v; } };
+function makeXlsx(sheets, opts){ // [{name, rows:[[...]]}] – first row is the bold header
+  if (!(opts && opts.raw) && LMODE() !== "en") sheets = sheets.map(sh => Object.assign({}, sh, {rows:sh.rows.map(r => r.map(LTX))}));
+  const RTL = !(opts && opts.raw) && LMODE() === "ar";
   const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"', H = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
   const ws = sheets.map(sh => { const widths = [];
     const body = sh.rows.map((r, ri) => `<row r="${ri+1}">` + r.map((v, ci) => {
@@ -3346,7 +3679,7 @@ function makeXlsx(sheets){ // [{name, rows:[[...]]}] – first row is the bold h
       if (typeof v === "number" && isFinite(v)) return `<c r="${ref}"${st}><v>${v}</v></c>`;
       return `<c r="${ref}" t="inlineStr"${st}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`; }).join("") + "</row>").join("");
     const cols = widths.length ? `<cols>${widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w||8}" customWidth="1"/>`).join("")}</cols>` : "";
-    return `${H}<worksheet ${NS}><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${body}</sheetData></worksheet>`; });
+    return `${H}<worksheet ${NS}><sheetViews><sheetView workbookViewId="0"${RTL ? ' rightToLeft="1"' : ""}><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${body}</sheetData></worksheet>`; });
   const used = new Set();
   const names = sheets.map((sh, i) => { let n = String(sh.name || ("Sheet" + (i+1))).replace(/[\[\]:*?\/\\]/g, " ").slice(0, 31) || ("Sheet" + (i+1)); while (used.has(n.toLowerCase())) n = n.slice(0, 28) + " " + (i+1); used.add(n.toLowerCase()); return n; });
   const files = [
@@ -4118,16 +4451,16 @@ function cropPhoto(src, opts){
 // click a horse photo → short info on one side, photo in the middle, ident marking on the other side
 function showHorseCard(id){
   const h = (S.horses || []).find(x => x._id === id); if (!h) return;
-  const im = horseImg(id), mi = horseMarkImg(id), a = horseAge(h), mk = horseMarking(h), cap = horseCapName(h);
+  const im = horseImg(id), mi = horseMarkImg(id), a = horseAge(h), mk = horseMarking(h), cap = horseCapName(h), HB = horseBwt(h);
   const vs = S.visits.filter(v => ofHorse({pid:h.pid || "", name:h.name || h.nameEn || ""}, v)).sort((x, y) => (y.date || "").localeCompare(x.date || "")), last = vs[0];
   const info = [["No.", h.listNo], ["Patient ID", h.pid], ["Name", h.name], ["English", h.nameEn], ["Type / Sex", h.sex], ["Breed", h.breed],
-    ["Born", h.birth ? dshow(h.birth) : h.birthYear], ["Age", a === null ? "" : a + " yrs"], ["Body weight", h.weightKg ? h.weightKg + " kg" : ""], ["Category", h.category],
+    ["Born", h.birth ? dshow(h.birth) : h.birthYear], ["Age", a === null ? "" : a + " yrs"], ["Body weight", h.weightKg ? h.weightKg + " kg" : ""], ["Standard BWT", HB.std ? Math.round(HB.std) + " kg" : ""], ["Remarks on BWT", h.weightKg || h.bwtRemark ? (h.bwtRemark || HB.auto || "—") : ""], ["Category", h.category],
     ["Height", heightShow(h.heightCm)], ["Body condition score", h.bcs ? h.bcs + (bcsRow(h.bcs) ? " – " + bcsRow(h.bcs).class : "") : ""], ["Feeding status", h.feedStatus], ["Job Status", h.workStatus], ["Syce Name", h.syce], ["Teeth", h.teeth], ["Hoof condition", h.hoofShoeing], ["Limb", h.limb], ["Shoeing type", h.shoeType], ["Date of shoeing", h.shoeDate ? dshow(h.shoeDate) : ""], ["Trimming", h.trimming], ["Sire", h.sire], ["Dam", h.dam],
     ["Source", h.source], ["Rider", h.rider], ["Microchip", h.microchip], ["Service", horseSvc(h)], ["Visits", vs.length || ""], ["Last visit", last ? dshow(last.date) + (last.td ? " – " + last.td : "") : ""]]
     .filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== "");
   modal(`<h2><span class="ar">${esc([h.name, h.nameEn].filter(Boolean).join(" / ") || h.pid || "Horse")}</span></h2>
     <div class="hcard">
-      <div class="side"><h3>Short info</h3>${info.map(([l, v]) => `<div class="kvr"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("") || '<p class="muted small">No details yet.</p>'}</div>
+      <div class="side"><h3>Short info</h3>${info.map(([l, v]) => l === "Remarks on BWT" ? `<div class="kvr"><span>${esc(l)}</span><b><select id="hcBwtRem" data-noother title="${esc(HB.std ? "Standard " + Math.round(HB.std) + " kg – " + HB.method : "Add height and birth date for the standard")}" style="width:auto;padding:1px 4px"><option value="">${esc("Auto" + (HB.auto ? " – " + HB.auto : ""))}</option>${BWT_REMS.map(x => `<option value="${esc(x)}"${h.bwtRemark === x ? " selected" : ""}>${esc(x)}</option>`).join("")}${h.bwtRemark && !BWT_REMS.includes(h.bwtRemark) ? `<option selected>${esc(h.bwtRemark)}</option>` : ""}</select></b></div>` : `<div class="kvr"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("") || '<p class="muted small">No details yet.</p>'}</div>
       <figure>${im ? `<img src="${esc(im.data)}" alt="${esc(cap)}" data-act="zoom">` : '<div class="muted" style="padding:50px 0;border:1px dashed var(--line);border-radius:8px">🐴<br>No photo yet</div>'}
         <figcaption><b>${esc(cap)}</b><div class="muted small">${[h.color, h.headMark, h.legMark].filter(Boolean).map(mkShow).join(" · ")}</div></figcaption></figure>
       <div class="side"><h3>Ident marking</h3>${horseMarksHTML(h, "mkline") || '<p class="muted small">No colour or markings typed yet – add them with “Photo / caption”.</p>'}
@@ -4147,6 +4480,8 @@ function showHorseCard(id){
     if (act === "hf") { location.href = hfLink(h.pid || "", h.name || h.nameEn || ""); return; }
     if (act === "rx") { close(); return startRxFor(h.pid || "", h.name || h.nameEn || ""); }
   });
+  { const bg = [...document.querySelectorAll(".modal-bg")].pop(), sel = bg && bg.querySelector("#hcBwtRem");
+    if (sel) sel.onchange = async () => { await saveHorseFields(h, {bwtRemark:sel.value}); toast("Remarks on BWT saved."); }; }
 }
 // delete one horse (a row) – its prescriptions, vaccinations and Examination Sheets stay
 function deleteHorse(id){
@@ -4625,6 +4960,7 @@ function renderAlerts(main){
 
 /* share menu: one notification or all of them – Share sheet, WhatsApp, email, SMS, copy */
 function ncShareMenu(txt, anchor, title, withAll){
+  txt = LTX(txt); title = LTX(title);
   const old = $("#ncMenu"); if (old) old.remove();
   const C = fsRecipients(), ph = C.filter(x => fsNum(x.phone)), em = C.filter(x => String(x.email || "").includes("@"));
   const subj = encodeURIComponent((ST().clinic || "My Equine Clinic") + " – Notifications " + dshow(today()));
@@ -5150,6 +5486,46 @@ function hMatchCard(h){
     h.category, h.feedStatus && "Feeding: " + h.feedStatus, (h.sire || h.dam) && `Sire ${h.sire || "–"} × Dam ${h.dam || "–"}`, `💉 ${v.state === "none" ? "no record" : v.state === "due" ? "due" : "ok"} · 🪱 ${d.state === "none" ? "no record" : d.state === "due" ? "due" : "ok"}`].filter(Boolean);
   return `<button type="button" class="hm-card ${hcClass(h.category)}" data-hz="${esc(h._id)}">${im ? `<img src="${esc(im.data)}" alt="">` : '<span class="hm-ph">🐴</span>'}<span><b class="ar">${esc([h.nameEn, h.name].filter(Boolean).join(" – ") || h.pid)}</b><span class="hm-kv">${kv.map(x => `<div>${esc(x)}</div>`).join("")}</span></span></button>`;
 }
+// search result → everything for this horse: info card, formulation, breeding, latest prescription (see all), vaccination & deworming, due status
+function horseHub(id){
+  const h = (S.horses || []).find(x => x._id === id); if (!h) return;
+  const p = {pid:h.pid || "", name:h.name || h.nameEn || "", nameEn:h.nameEn || ""}, im = horseImg(id);
+  const vs = (S.visits || []).filter(v => ofHorse(p, v)).sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))), lv = vs[0];
+  const vac = hPrevState(h, "vacc"), dew = hPrevState(h, "deworm"), fp = h.feedPlan, ong = fdOngoing(h), bk = bdKind(h), nb = bk !== "gelding" ? bdOfHorse(h).length : 0;
+  const st = x => x.state === "none" ? T2("No record", "لا يوجد سجل") : x.state === "due" ? T2("Due", "مستحق") : T2("OK", "جيد");
+  const due = [];
+  [["vacc", vac, "💉", T2("Vaccination", "التطعيم")], ["deworm", dew, "🪱", T2("Deworming", "التخلص من الديدان")]].forEach(([k, x, ic, nm]) => {
+    if (x.state === "none") due.push(`${ic} ${nm}: ${T2("no record", "لا يوجد سجل")}`);
+    (x.due || []).forEach(r => due.push(`${ic} ${nm}: ${r.drug || ""} – ${dueWords(r.next)}`)); });
+  (S.notes || []).filter(n => !n.done && n.due && ofHorse(p, n) && daysUntil(n.due) <= remindDays()).forEach(n => due.push(`📝 ${n.title || String(n.text || "").slice(0, 60)} – ${dueWords(n.due)}`));
+  const row = (ic, title, sub, btns) => `<div class="hubrow" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)"><span style="font-size:20px;width:28px;text-align:center">${ic}</span><div style="flex:1;min-width:0"><b>${esc(title)}</b><div class="small muted" data-notr>${sub}</div></div><div class="row" style="gap:4px;flex-wrap:wrap;justify-content:flex-end">${btns}</div></div>`;
+  const b = (act, t, pri) => `<button class="small${pri ? " pri" : ""}" data-act="${act}">${esc(t)}</button>`;
+  modal(`<div class="row" style="align-items:center;gap:12px">${im ? `<img src="${esc(im.data)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--line)">` : '<span style="font-size:40px">🐴</span>'}
+      <div><h2 style="margin:0"><span class="ar">${esc([h.name, h.nameEn].filter(Boolean).join(" / ") || h.pid)}</span></h2><div class="small muted">${esc([h.pid && "ID " + h.pid, h.listNo && "No. " + h.listNo, h.category, h.sex, h.breed].filter(Boolean).join(" · "))}</div></div></div>
+    <div style="margin-top:8px">
+      ${row("🐴", "Horse Info Card", esc([h.weightKg && h.weightKg + " kg", h.bwtRemark || horseBwt(h).auto, h.feedStatus].filter(Boolean).join(" · ")), b("card", "Open", true))}
+      ${row("🌾", "Formulation", fp ? esc([fp.status, fp.ratio, fp.hay, fp.conc1].filter(Boolean).join(" · ")) + (ong ? " · " + esc(T2("ongoing", "الحالي")) + ": " + esc(ong.srcTxt) : "") : esc(T2("No saved plan yet", "لا توجد خطة محفوظة بعد")), b("fd", "Open") + b("fdp", "🖨 Print formulation"))}
+      ${bk !== "gelding" ? row("🐎", "Breeding Data", esc(nb ? nb + " " + T2("check-up(s)", "فحص") : T2("No check-ups yet", "لا توجد فحوصات بعد")), b("bd", nb ? "Open" : "+ Add")) : ""}
+      ${row("💊", "Latest Prescription", lv ? esc(dshow(lv.date) + (lv.td ? " – " + lv.td : "")) + ` · ${vs.length} ${esc(T2("visit(s)", "زيارة"))}` : esc(T2("No prescription yet", "لا توجد وصفة بعد")), (lv ? b("rx1", "Open") : "") + b("rxall", "See all") + b("rxnew", "+ Rx"))}
+      ${row("💉", "Vaccination & Deworming Status", `💉 ${esc(vac.state === "none" ? st(vac) : st(vac) + ": " + hPrevText(vac))}<br>🪱 ${esc(dew.state === "none" ? st(dew) : st(dew) + ": " + hPrevText(dew))}`, b("vac", "💉") + b("dew", "🪱"))}
+      ${row("⏰", "Due Status", due.length ? due.map(esc).join("<br>") : esc(T2("Nothing due ✔", "لا يوجد مستحق ✔")), "")}
+    </div>
+    <div class="row" style="margin-top:12px"><button data-act="ex">Examination Sheet</button><span class="spacer"></span><button class="pri" data-act="close">Close</button></div>`, (act, close) => {
+    const go = f => { document.querySelectorAll(".modal-bg").forEach(x => x.remove()); f(); };
+    if (act === "close") return close();
+    if (act === "card") return go(() => showHorseCard(id));
+    if (act === "fd") return go(() => { fdLoadHorse(id); FD_SCOPE = "one"; FD_TAB = "calc"; if (location.hash !== "#feeding") location.hash = "#feeding"; else render(true); });
+    if (act === "fdp") return fdFormPrint(id);
+    if (act === "bd") return go(() => { if (nb) { BD_TAB = "list"; BD_Q = h.pid || h.name || h.nameEn || ""; BD_F = ""; if (location.hash !== "#breeding") location.hash = "#breeding"; else render(true); } else editBreeding(null, {horseId:id, kind:bk || "mare"}); });
+    if (act === "rx1" && lv) return go(() => openVisit(lv._id));
+    if (act === "rxall") return go(() => openPatient(h.pid || "", h.name || h.nameEn || ""));
+    if (act === "rxnew") return go(() => startRxFor(h.pid || "", h.name || h.nameEn || ""));
+    if (act === "vac") return go(() => editPrev("vacc", null, {pid:h.pid || "", name:h.name || h.nameEn || ""}));
+    if (act === "dew") return go(() => editPrev("deworm", null, {pid:h.pid || "", name:h.name || h.nameEn || ""}));
+    if (act === "ex") { location.href = hfLink(h.pid || "", h.name || h.nameEn || ""); return; }
+    if (act === "rec") return go(() => openPatient(h.pid || "", h.name || h.nameEn || ""));
+  });
+}
 function gsSearch(raw){
   const q = hk(raw).split(/\s+/).filter(Boolean); if (!q.length) return [];
   const has = (...f) => { const s = f.map(x => String(x ?? "")).join(" ").toLowerCase(); return q.every(w => s.includes(w)); };
@@ -5167,10 +5543,11 @@ function gsSearch(raw){
   if (!hs.length) { // spelling mistake → closest horse names
     hs = [...H.values()].map(h => { const r = horseRec(h); return [h, fuzzyDist(raw, [h.name, h.nameEn, ...((r && Array.isArray(r.aliases)) ? r.aliases : [])])]; }).filter(x => x[1] < Infinity).sort((a, b) => a[1] - b[1]).map(x => x[0]);
     hsFz = hs.length > 0; }
-  hs.slice(0, 12).forEach(h => { const it = add(hsFz ? "Horses – closest spelling" : `Horses (${hs.length})`, [h.name, h.nameEn].filter(Boolean).join(" / ") || h.pid, [h.pid && "ID " + h.pid, h.sex, h.breed, h.cat, `${h.n} visit(s)`, h.last && "last " + dshow(h.last)].filter(Boolean).join(" · "), () => h.hid ? showHorseCard(h.hid) : openPatient(h.pid, h.name || h.nameEn)); out[out.length - 1].hid = h.hid; });
+  hs.slice(0, 12).forEach(h => { const it = add(hsFz ? "Horses – closest spelling" : `Horses (${hs.length})`, [h.name, h.nameEn].filter(Boolean).join(" / ") || h.pid, [h.pid && "ID " + h.pid, h.sex, h.breed, h.cat, `${h.n} visit(s)`, h.last && "last " + dshow(h.last)].filter(Boolean).join(" · "), () => h.hid ? horseHub(h.hid) : openPatient(h.pid, h.name || h.nameEn)); out[out.length - 1].hid = h.hid; });
   if (hs.length && (hs.length === 1 || exactH(hs[0]))) { // one horse → link everything about it
     const h = hs[0], p = {pid:h.pid, name:h.name || h.nameEn}, g = `Everything for ${[h.name, h.nameEn].filter(Boolean).join(" / ") || h.pid}`;
     const nv = S.visits.filter(v => ofHorse(p, v)).length, np = S.preventive.filter(r => ofHorse(p, r)).length, nn = S.notes.filter(n => ofHorse(p, n)).length, nf = hFiles(p).length;
+    if (h.hid) add(g, "🔗 All links for this horse", "Info card, formulation, breeding, latest prescription, vaccination & deworming, due status", () => horseHub(h.hid));
     if (h.hid) add(g, "🐴 Horse card", "Photo, all details, markings – edit, record, Examination Sheet", () => showHorseCard(h.hid));
     add(g, "📋 Full patient record", `${nv} visit(s) · ${np} vaccination/deworming · ${nn} note(s) – print or save as PDF`, () => openPatient(h.pid, p.name));
     add(g, "🐴 Examination Sheet and Records / ورقة الفحص والسجلات", "Weight, shoeing, vitals, vaccinations, treatment plan", () => { location.href = hfLink(h.pid, h.name || h.nameEn); });
@@ -5352,8 +5729,8 @@ function renderHistory(main){
     const all = [...list.map(v => ({d:v.date || "", h:visitCard(v,false)})), ...ex.map(r => ({d:exDate(r), h:exCard(r)})), ...br.map(r => ({d:r.date || "", h:bdCard(r)}))].sort((a, b) => b.d.localeCompare(a.d));
     $("#hcount").textContent = `${list.length} visit(s) · ${ex.length} examination sheet(s)` + (br.length ? ` · ${br.length} breeding check-up(s)` : "") + (q ? ` matching “${histQ}”` : "") + ` · ${new Set(S.visits.map(v=>v.name)).size} horses in total`;
     $("#hlist").innerHTML = all.slice(0,200).map(x => x.h).join("") || `<p class="muted">No visits found.</p>`;
-    const HM = q ? hSearch(q) : []; $("#hmatch").innerHTML = HM.length ? `<p class="small muted" style="margin:8px 0 0"><b>🐴 Horses (${HM.length})</b> – tap a card to open the horse card</p><div class="hmatch">${HM.slice(0, 24).map(hMatchCard).join("")}</div>` : "";
-    $("#hmatch").querySelectorAll("[data-hz]").forEach(b => b.onclick = () => showHorseCard(b.dataset.hz));
+    const HM = q ? hSearch(q) : []; $("#hmatch").innerHTML = HM.length ? `<p class="small muted" style="margin:8px 0 0"><b>🐴 Horses (${HM.length})</b> – tap a card to see all links for the horse</p><div class="hmatch">${HM.slice(0, 24).map(hMatchCard).join("")}</div>` : "";
+    $("#hmatch").querySelectorAll("[data-hz]").forEach(b => b.onclick = () => horseHub(b.dataset.hz));
     $("#hlist").querySelectorAll("[data-bdopen]").forEach(b => b.onclick = () => editBreeding(b.dataset.bdopen));
     $("#hlist").querySelectorAll("[data-open]").forEach(b => b.onclick = () => openVisit(b.dataset.open));
     bindPat($("#hlist"));
@@ -5845,7 +6222,7 @@ function renderHorses(main){
 }
 let HORSES_SHOWN = [];
 const HF = [["listNo","No.","text"],["pid","Patient ID","text"],["name","Name (Arabic) / اسم الخيل","text"],["nameEn","Name (English)","text"],["sex","Type / Sex – نوع الخيل","dl:dl_htypes"],["breed","Breed","dl:dl_hbreeds"],
-  ["birth","Birth date (if known)","date"],["birthYear","Birth year","number"],["weightKg","Body weight (kg)","number"],["weightDate","Weight date","date"],["color","Color","text"],["rider","Rider","text"],
+  ["birth","Birth date (if known)","date"],["birthYear","Birth year","number"],["weightKg","Body weight (kg)","number"],["bwtRemark","Remarks on BWT","dl:dl_bwtrem"],["weightDate","Weight date","date"],["color","Color","text"],["rider","Rider","text"],
   ["microchip","Microchip No.","text"],["militaryNo","Military No.","text"],["source","Source","dl:dl_hsrc"],["category","Category / purpose","dl:dl_hcat"],["listNotes","Notes","text"],
   ["bcs","Body condition score (1–9)","dl:dl_bcs"],["feedStatus","Feeding status","dl:dl_fstat"],["workStatus","Job Status","dl:dl_wstat"],["syce","Syce Name","text"],
   ["sire","Sire (optional)","text"],["dam","Dam (optional)","text"],
@@ -5866,6 +6243,7 @@ function hfSelOpts(k){
     case "shoeType": return plus(SHOE_TYPES, "shoeType").map(v => [v, v]);
     case "bcs": return FCFG().bcs.map(b => [String(b.score), b.score + " – " + b.class + (b.henneke ? " (" + b.henneke + ")" : "")]);
     case "feedStatus": return FCFG().statuses.map(x => [x.status, x.status]);
+    case "bwtRemark": return BWT_REMS.map(v => [v, v]);
   }
   return [];
 }
@@ -5888,6 +6266,9 @@ function pedIntoForm(bg, id){
 let WCALC_SET = null;
 const WC_DIV = () => { try { return N(localStorage.getItem("mec_wdiv")) || 330; } catch(e) { return 330; } };
 const WC_KF = () => { try { return N(localStorage.getItem("mec_wkf")) || 2.2; } catch(e) { return 2.2; } };
+// divisor by horse type: adult light horse 330, pony 299, yearling 301, weanling 280–290 (285); young foal: girth (m)³ × 90 = kg
+const WC_CLS = [["adult", "Adult light horse (÷ 330)", 330], ["pony", "Pony (÷ 299)", 299], ["yearling", "Yearling (÷ 301)", 301], ["weanling", "Weanling (÷ 280–290, 285 used)", 285], ["foal", "Young foal – girth (m)³ × 90 = kg", null]];
+const wcClassOf = (dob, breed) => { const m = fdAgeM(dob); if (m !== null && m >= 0) { if (m < 4) return "foal"; if (m < 12) return "weanling"; if (m < 24) return "yearling"; } return bwtBreedType(breed) === "Pony" ? "pony" : "adult"; };
 function wireWCalc(bg, h){
   WCALC_SET = null;
   const wi = bg.querySelector("#eh_weightKg"); if (!wi) return;
@@ -5897,24 +6278,33 @@ function wireWCalc(bg, h){
     let fr = null; try { fr = fileRec({pid:h.pid || "", name:h.name || h.nameEn || ""}); } catch(e){}
     const fd = (fr && fr.data) || {};
     const L0 = h.lengthIn ?? fd.lengthIn ?? "", G0 = h.girthIn ?? fd.girthIn ?? "";
+    const fv = k => { const el = bg.querySelector("#eh_" + k); return el ? el.value.trim() : String(h[k] ?? ""); }, by = fv("birthYear"), cls0 = wcClassOf(fv("birth") || (N(by) ? by + "-01-01" : ""), fv("breed")), d0 = (WC_CLS.find(c => c[0] === cls0) || WC_CLS[0])[2] || 330;
     const box = document.createElement("div"); box.className = "wc-pop";
     box.innerHTML = `<div class="wc-card"><h3 style="margin:0 0 8px">⚖ Body weight formula</h3>
+      <label>Horse type (by age and breed)<select id="wc_C" data-noother>${WC_CLS.map(c => `<option value="${c[0]}"${c[0] === cls0 ? " selected" : ""}>${esc(c[1])}</option>`).join("")}</select></label>
       <div class="grid g2"><label>Body length (inch)<input id="wc_L" type="number" step="0.1" value="${esc(L0)}"></label><label>Heart girth (inch)<input id="wc_G" type="number" step="0.1" value="${esc(G0)}"></label></div>
-      <div class="wc-fx">(<span id="wc_fl">L</span> × <span id="wc_fg">G</span> × <span id="wc_fg2">G</span>) inch ÷ <input id="wc_D" type="number" step="any" value="${WC_DIV()}" title="Editable"> = <b id="wc_lb">lbs</b> lbs ÷ <input id="wc_K" type="number" step="0.01" value="${WC_KF()}" title="Editable"> = <b id="wc_kg">kg</b> kg</div>
-      <p class="small muted" style="margin:6px 0">The two boxes in the formula (divisor and 2.2) can be edited – your divisor is remembered.</p>
+      <div class="wc-fx" id="wc_fxA">(<span id="wc_fl">L</span> × <span id="wc_fg">G</span> × <span id="wc_fg2">G</span>) inch ÷ <input id="wc_D" type="number" step="any" value="${d0}" title="Editable"> = <b id="wc_lb">lbs</b> lbs ÷ <input id="wc_K" type="number" step="0.01" value="${WC_KF()}" title="Editable"> = <b id="wc_kg">kg</b> kg</div>
+      <div class="wc-fx" id="wc_fxF" hidden>Girth <span id="wc_gi">G</span> inch × 0.0254 = <span id="wc_gm">m</span> m → (<span id="wc_gm2">m</span>)³ × 90 = <b id="wc_kgF">kg</b> kg</div>
+      <p class="small muted" style="margin:6px 0">The divisor follows the horse type (adult light horse 330, pony 299, yearling 301, weanling 280–290); the boxes can still be edited. Young foals: girth formula (standard length × girth formulas are less reliable).</p>
       <div class="row"><span class="spacer"></span><button type="button" data-wc="x">Cancel</button><button type="button" class="pri" data-wc="use">Use this weight</button></div></div>`;
     bg.appendChild(box);
     const q = s => box.querySelector(s), nv = s => N(q(s).value);
-    const calc = () => { const L = nv("#wc_L"), G = nv("#wc_G"), D = nv("#wc_D"), K = nv("#wc_K");
+    const calc = () => { const L = nv("#wc_L"), G = nv("#wc_G"), D = nv("#wc_D"), K = nv("#wc_K"), C = q("#wc_C").value, foal = C === "foal";
+      q("#wc_fxA").hidden = foal; q("#wc_fxF").hidden = !foal;
       q("#wc_fl").textContent = L ?? "L"; q("#wc_fg").textContent = q("#wc_fg2").textContent = G ?? "G";
+      if (foal) { const m = G ? G * 0.0254 : null, kgF = m ? m * m * m * 90 : null;
+        q("#wc_gi").textContent = G ?? "G"; q("#wc_gm").textContent = q("#wc_gm2").textContent = m ? m.toFixed(3) : "m"; q("#wc_kgF").textContent = kgF !== null ? kgF.toFixed(0) : "kg";
+        return {L, G, D:null, K, kg:kgF, C}; }
       const lb = L && G && D ? L * G * G / D : null, kg = lb !== null && K ? lb / K : null;
-      q("#wc_lb").textContent = lb !== null ? lb.toFixed(0) : "lbs"; q("#wc_kg").textContent = kg !== null ? kg.toFixed(0) : "kg"; return {L, G, D, K, kg}; };
-    box.querySelectorAll("input").forEach(i => i.addEventListener("input", calc)); calc();
+      q("#wc_lb").textContent = lb !== null ? lb.toFixed(0) : "lbs"; q("#wc_kg").textContent = kg !== null ? kg.toFixed(0) : "kg"; return {L, G, D, K, kg, C}; };
+    box.querySelectorAll("input").forEach(i => i.addEventListener("input", calc));
+    q("#wc_C").onchange = () => { const c = WC_CLS.find(x => x[0] === q("#wc_C").value); if (c && c[2]) q("#wc_D").value = c[2]; calc(); }; calc();
     q('[data-wc="x"]').onclick = () => box.remove();
-    q('[data-wc="use"]').onclick = () => { const r = calc(); if (r.kg === null) { toast("Enter body length and heart girth."); return; }
-      try { localStorage.setItem("mec_wdiv", String(r.D)); localStorage.setItem("mec_wkf", String(r.K)); } catch(e){}
+    q('[data-wc="use"]').onclick = () => { const r = calc(); if (r.kg === null) { toast(r.C === "foal" ? "Enter heart girth." : "Enter body length and heart girth."); return; }
+      try { if (r.D) localStorage.setItem("mec_wdiv", String(r.D)); if (r.K) localStorage.setItem("mec_wkf", String(r.K)); } catch(e){}
       wi.value = Math.round(r.kg); const wd = bg.querySelector("#eh_weightDate"); if (wd) wd.value = today();
-      WCALC_SET = {lengthIn:r.L, girthIn:r.G, wDivisor:r.D, weightMethod:"tape formula"}; box.remove(); toast("Weight filled – press Save."); };
+      WCALC_SET = {lengthIn:r.L ?? "", girthIn:r.G, wDivisor:r.D ?? "", weightMethod:r.C === "foal" ? "foal girth formula" : "tape formula"}; box.remove();
+      wi.dispatchEvent(new Event("input")); toast("Weight filled – press Save."); };
   };
 }
 // "Status of horse" is no longer an option in Horses Data › Edit (saved values are kept)
@@ -5952,7 +6342,19 @@ function editHorse(id, prefill){
       await W(() => db.doc("horses/" + key).set({...old, ...d, updatedAt:new Date().toISOString()})); if (typeof h._after === "function") await h._after(key); close(); toast(id ? "Horse updated." : "Horse added."); };
     if (dup) confirmBox(`${dup.name || dup.nameEn} already has this ${d.pid && hk(dup.pid) === hk(d.pid) ? "Patient ID" : "name"}. Save anyway?`, go); else go();
   });
-  { const bg = [...document.querySelectorAll(".modal-bg")].pop(); wireMk(bg); wireHeight(bg, "eh_"); pedIntoForm(bg, id); wireWCalc(bg, h); }
+  { const bg = [...document.querySelectorAll(".modal-bg")].pop(); wireMk(bg); wireHeight(bg, "eh_"); pedIntoForm(bg, id); wireWCalc(bg, h); wireBwtRem(bg, h); }
+}
+// Horses Data › Edit: the standard body weight and the automatic remark, worked out live from the form
+function wireBwtRem(bg, h){
+  const sel = bg.querySelector("#eh_bwtRemark"); if (!sel) return;
+  const o0 = sel.querySelector('option[value=""]'), note = document.createElement("span"); note.className = "small muted"; note.style.cssText = "text-transform:none;letter-spacing:0;font-weight:normal;display:block";
+  sel.closest("label").appendChild(note);
+  const v = k => { const el = bg.querySelector("#eh_" + k); return el ? el.value.trim() : ""; };
+  const upd = () => { const by = v("birthYear"), s = bwtStd({dob:v("birth") || (N(by) ? by + "-01-01" : ""), heightCm:v("heightCm"), lengthIn:(WCALC_SET && WCALC_SET.lengthIn) ?? h.lengthIn, breed:v("breed"), matureBw:h.matureBw}), m = bwtMark(v("weightKg"), s.std);
+    if (o0) o0.textContent = "Auto" + (m ? " – " + m : "");
+    note.dataset.notr = "1"; note.textContent = s.std ? T2("Standard BWT " + Math.round(s.std) + " kg (±" + BWT_TOL + " kg = OK)", "الوزن القياسي " + Math.round(s.std) + " كجم (±" + BWT_TOL + " كجم = مناسب)") + (m ? " · " + bwtTxt(v("weightKg"), s.std) : "") : T2("Standard BWT needs height (and birth date for young horses)", "الوزن القياسي يحتاج الارتفاع (وتاريخ الميلاد للخيول الصغيرة)"); note.title = s.method || ""; };
+  ["weightKg","birth","birthYear","breed","heightCm","heightHh"].forEach(k => { const el = bg.querySelector("#eh_" + k); if (el) { el.addEventListener("input", upd); el.addEventListener("change", upd); } });
+  upd();
 }
 async function seedHorses(){
   const pass = prompt(`Passcode for your built-in horse list (${H_BUILTIN.n} horses):`); if (!pass) return;
@@ -6538,7 +6940,7 @@ function bkXlsx(B){
   const secs = bkSections(B), n = a => (a || []).length;
   const contents = [["Section","Records"], ...secs.map(s => [s[0], n(s[1])]), ["", ""], ["Backup made", new Date(B.exported).toLocaleString("en-GB")], ["Clinic", ($("#clinicName") || {}).textContent || "My Equine Clinic"],
     ["Note", "Photos, videos and medicine pictures are not in Excel – they are in the JSON or HTML backup."]];
-  return makeXlsx([{name:"Contents", rows:contents}, ...secs.map(s => ({name:s[0], rows:bkRows(s[1], s[2])}))]);
+  return makeXlsx([{name:"Contents", rows:contents}, ...secs.map(s => ({name:s[0], rows:bkRows(s[1], s[2])}))], {raw:true});
 }
 function bkHtml(B){
   const secs = bkSections(B), clinic = ($("#clinicName") || {}).textContent || "My Equine Clinic", n = a => (a || []).length;
@@ -6813,6 +7215,7 @@ window.LANG_CFG = {def:"en", pickEn:false, skip:"script,style,textarea,input,sel
   Object.assign(D, {"Receive – pick unit":"استلام – اختر الوحدة","Use – pick unit":"استخدام – اختر الوحدة","Amount":"الكمية","Enter the amount.":"أدخل الكمية.","new balance":"الرصيد الجديد"});
   Object.assign(D, {"Composition":"التركيب","Balance (bottle / vial / amp / pack / powder)":"الرصيد (زجاجة / فيال / أمبول / عبوة)","Amount (mg / gm / ml / L / Kg / no)":"الكمية (ملغ / مل / لتر / كغ / عدد)","Balance unit (bottle / vial / amp / pack)":"وحدة الرصيد (زجاجة / فيال / أمبول / عبوة)","Composition – from linked medicine":"التركيب – من الدواء المرتبط","ml or L = automatic deduction by prescriptions":"مل أو لتر = خصم تلقائي من الوصفات","Change unit":"تغيير الوحدة","Bottle":"زجاجة","Vial":"فيال","Amp":"أمبول","Pack":"عبوة","total":"الإجمالي","unit":"وحدة"});
   Object.assign(D, {"⚖ Weight formula":"⚖ معادلة الوزن","⚖ Body weight formula":"⚖ معادلة وزن الجسم","Body length (inch)":"طول الجسم (إنش)","Heart girth (inch)":"محيط الصدر (إنش)","The two boxes in the formula (divisor and 2.2) can be edited – your divisor is remembered.":"الرقمان في المعادلة (القاسم و 2.2) قابلان للتعديل – ويتم حفظ القاسم.","Use this weight":"استخدم هذا الوزن","Enter body length and heart girth.":"أدخل طول الجسم ومحيط الصدر.","Weight filled – press Save.":"تمت تعبئة الوزن – اضغط حفظ."});
+  Object.assign(D, {"Horse Info Card":"بطاقة معلومات الحصان","Formulation":"التركيبة الغذائية","Breeding Data":"بيانات التناسل","Latest Prescription":"آخر وصفة","See all":"عرض الكل","+ Rx":"+ وصفة","Vaccination & Deworming Status":"حالة التطعيم والتخلص من الديدان","Due Status":"حالة الاستحقاق","🔗 All links for this horse":"🔗 كل الروابط لهذا الحصان","Info card, formulation, breeding, latest prescription, vaccination & deworming, due status":"بطاقة المعلومات، التركيبة، التناسل، آخر وصفة، التطعيم والديدان، الاستحقاق","– tap a card to see all links for the horse":"– اضغط على البطاقة لعرض كل روابط الحصان","📋 Full patient record":"📋 السجل الكامل للمريض","Ratio of feed : hay":"نسبة العلف : الدريس","Saved":"تاريخ الحفظ","Plan":"الخطة","Hay kg/day (as fed)":"الدريس كجم/يوم (كما يقدم)","Concentrate kg/day (as fed)":"المركز كجم/يوم (كما يقدم)","Total kg/day (as fed)":"الإجمالي كجم/يوم (كما يقدم)","ME required / supplied (MJ)":"الطاقة المطلوبة / المقدمة (ميجاجول)","CP required / supplied (g)":"البروتين المطلوب / المقدم (غ)","Extra supplements":"مكملات إضافية","Checks":"الفحوصات","Ratio hay : concentrate":"نسبة الدريس : المركز","Total feed % BW (DM)":"إجمالي العلف % من الوزن (مادة جافة)","Feed kg/day":"العلف كجم/يوم","Supplement name (library or your own)":"اسم المكمل (من المكتبة أو خاص بك)","g/day":"غ/يوم","🖨 Print formulation":"🖨 طباعة التركيبة","Print formulation":"طباعة التركيبة","Ongoing ration – required – short / extra":"العليقة الحالية – المطلوب – النقص / الزيادة","Ongoing feed":"العلف الحالي","Ongoing hay":"الدريس الحالي","Save ongoing":"حفظ العليقة الحالية","Clear typed":"مسح المكتوب","Ongoing":"الحالي","Required":"المطلوب","Short / Extra":"النقص / الزيادة","Gradual change":"التغيير التدريجي","Adjustment suggestions for the owner (printed)":"اقتراحات التعديل للمالك (تطبع)","+ Add extra supplement":"+ إضافة مكمل إضافي","Review":"مراجعة","Open (edit)":"فتح (تعديل)","Review note (optional)":"ملاحظة المراجعة (اختياري)","Reviews":"المراجعات","Hay ongoing":"الدريس الحالي","Feed ongoing":"العلف الحالي","Total ongoing":"الإجمالي الحالي","Hay – ongoing":"الدريس – الحالي","Feed – ongoing":"العلف – الحالي","Standard BWT (kg) – breed · age · height":"الوزن القياسي (كجم) – السلالة · العمر · الارتفاع","Ongoing ration saved to Horses Data.":"تم حفظ العليقة الحالية في بيانات الخيل.","Remarks on BWT":"ملاحظات على الوزن","The divisor follows the horse type (adult light horse 330, pony 299, yearling 301, weanling 280–290); the boxes can still be edited. Young foals: girth formula (standard length × girth formulas are less reliable).":"القاسم حسب نوع الحصان (حصان خفيف بالغ 330، بوني 299، حولي 301، مفطوم 280–290)؛ ويمكن تعديل الخانات. المهر الصغير: معادلة محيط الصدر (معادلات الطول × المحيط أقل دقة).","Adult light horse (÷ 330)":"حصان خفيف بالغ (÷ 330)","Pony (÷ 299)":"بوني (÷ 299)","Yearling (÷ 301)":"حولي (÷ 301)","Weanling (÷ 280–290, 285 used)":"مفطوم (÷ 280–290، المستخدم 285)","Young foal – girth (m)³ × 90 = kg":"مهر صغير – (محيط الصدر م)³ × 90 = كجم","Over wt":"وزن زائد","Under wt":"وزن ناقص","Standard BWT":"الوزن القياسي","Gradual change of ration":"التغيير التدريجي للعليقة","Feed now being fed (kg/day)":"العلف المقدم حالياً (كجم/يوم)","Hay now being fed (kg/day)":"الدريس المقدم حالياً (كجم/يوم)","Horse type (by age and breed)":"نوع الحصان (حسب العمر والسلالة)","Calculated BWT / Standard BWT (age · height · breed)":"الوزن المحسوب / الوزن القياسي (العمر · الارتفاع · السلالة)","Remarks on BWT saved.":"تم حفظ ملاحظات الوزن.","Enter heart girth.":"أدخل محيط الصدر.","Day":"اليوم","Feed kg/day":"العلف كجم/يوم"});
   Object.assign(D, {"Feeding kg/day":"التغذية كجم/يوم","Amount conc / pellet feed (kg/day)":"كمية المركز / العلف المحبب (كجم/يوم)","Hay (kg/day)":"الدريس (كجم/يوم)","Conc / pellet feed kg":"المركز / العلف المحبب كجم","Hay kg":"الدريس كجم","Conc / pellet feed":"المركز / العلف المحبب","Total = Conc / Pellet feed + Hay (fills by itself)":"الإجمالي = المركز / العلف المحبب + الدريس (يحسب تلقائياً)"});
   Object.assign(D, {"Date of shoeing": "تاريخ التحذية"});
   Object.assign(D, {"Job Status": "حالة العمل", "Syce Name": "اسم السايس", "By Job Status": "حسب حالة العمل", "By Syce Name": "حسب اسم السايس", "By shoeing type": "حسب نوع التحذية", "Hoof condition": "حالة الحافر", "Limb": "الطرف", "Shoeing type": "نوع التحذية", "Regular": "عادي", "Therapeutic": "علاجي", "Trimming of hoof / sole / frog (which leg)": "تقليم الحافر / النعل / الضفدع (أي رجل)", "Trimming (hoof / sole / frog)": "التقليم (الحافر / النعل / الضفدع)", "Trimming": "التقليم"});
@@ -7004,7 +7407,7 @@ window.LANG_CFG = {def:"en", pickEn:false, skip:"script,style,textarea,input,sel
     } catch(e) { return s; }
   }
   window.LANG = {mode: () => MODE, html, text: t => (MODE === "en" ? t : (tr(t) ?? t)), set: setMode};
-  document.querySelectorAll("#langbar button").forEach(b => b.onclick = () => setMode(b.dataset.lang));
+  document.querySelectorAll("#langbar button").forEach(b => b.onclick = () => { setMode(b.dataset.lang); try { if (typeof render === "function") render(true); } catch(e) {} });
   setMode(MODE);
 })();
 </script>

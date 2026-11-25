@@ -215,6 +215,7 @@
         <div class="f"><label>Heart Girth (inch) / <span class="ar">محيط الصدر</span></label><input type="number" step="0.1" data-k="girthIn" id="girIn"></div>
         <div class="f"><label>Estimated (lbs) / <span class="ar">تقديري رطل</span></label><input class="out" id="estLb" readonly></div>
         <div class="f"><label>Estimated (kg) / <span class="ar">تقديري كغ</span></label><input class="out" id="estKg" readonly></div>
+        <div class="f"><label>Horse type (formula) / <span class="ar">نوع الحصان (المعادلة)</span></label><select data-k="wClass" id="wcls" title="Set by age and breed – can be changed / حسب العمر والسلالة – يمكن تغييره"><option value=""></option><option value="adult">Adult light horse (÷ 330) / حصان خفيف بالغ</option><option value="pony">Pony (÷ 299) / بوني</option><option value="yearling">Yearling (÷ 301) / حولي</option><option value="weanling">Weanling (÷ 280–290, 285) / مفطوم</option><option value="foal">Young foal – girth (m)³ × 90 / مهر صغير – (المحيط م)³ × 90</option></select></div>
       </div>
       <div class="formula" style="display:none">
         (<span id="fxL">L</span> × <span id="fxG">G</span> × <span id="fxG2">G</span>) inch ÷
@@ -343,11 +344,26 @@ resetTreat();
 
 /* ---------- body weight formula ---------- */
 const num = id => { const v=parseFloat($(id).value); return isNaN(v)?null:v; };
+// divisor by horse type: adult light horse 330, pony 299, yearling 301, weanling 280–290 (285); young foal: girth (m)³ × 90 = kg
+const WDIV = {adult:330, pony:299, yearling:301, weanling:285};
+function wAgeMonths(){
+  const a=($("#age")||{}).value||"", by=parseInt(($("#bYear")||{}).value,10), n=parseFloat(String(a).replace(",","."));
+  if(!isNaN(n)) return /month|mon|mo\b|شهر|أشهر/i.test(a) ? n : /day|يوم|أيام/i.test(a) ? n/30.4 : n*12;
+  if(by) return (Date.now()-new Date(by+"-01-01").getTime())/864e5/30.4375;
+  return null;
+}
+function wAutoClass(){
+  const br=(document.querySelector('[data-k="breed"]')||{}).value||"", m=wAgeMonths();
+  let c = /pony|shetland|falabella|miniature|caspian|بوني|قزم/i.test(br) ? "pony" : "adult";
+  if(m!==null && m>=0){ if(m<4) c="foal"; else if(m<12) c="weanling"; else if(m<24) c="yearling"; }
+  const w=$("#wcls"); if(!w) return; w.value=c; if(WDIV[c]) $("#div").value=WDIV[c]; calcWeight();
+}
 function calcWeight(){
   const L=num("#lenIn"), G=num("#girIn"), D=num("#div"), K=num("#kf");
   $("#fxL").textContent=L??"L"; $("#fxG").textContent=G??"G"; $("#fxG2").textContent=G??"G";
   let lb=null, kg=null;
-  if(L&&G&&D){ lb=L*G*G/D; $("#estLb").value=lb.toFixed(0); $("#fxLb").textContent=lb.toFixed(0);
+  if(($("#wcls")||{}).value==="foal" && G){ kg=Math.pow(G*0.0254,3)*90; lb=kg*(K||2.2); $("#estLb").value=lb.toFixed(0); $("#fxLb").textContent=lb.toFixed(0); $("#estKg").value=kg.toFixed(0); $("#fxKg").textContent=kg.toFixed(0); }
+  else if(L&&G&&D){ lb=L*G*G/D; $("#estLb").value=lb.toFixed(0); $("#fxLb").textContent=lb.toFixed(0);
     if(K){ kg=lb/K; $("#estKg").value=kg.toFixed(0); $("#fxKg").textContent=kg.toFixed(0);} }
   else { $("#estLb").value=$("#estKg").value=""; $("#fxLb").textContent="lbs"; $("#fxKg").textContent="kg"; }
   const man=num("#manKg");
@@ -360,6 +376,8 @@ function calcWeight(){
   if(use!=null && !$("#wDate").value) $("#wDate").value=today();
 }
 ["#lenIn","#girIn","#div","#kf","#manKg"].forEach(id=>$(id).addEventListener("input",calcWeight));
+$("#wcls").addEventListener("change",()=>{ const c=$("#wcls").value; if(WDIV[c]) $("#div").value=WDIV[c]; calcWeight(); });
+["#age","#bYear",'[data-k="breed"]'].forEach(sel=>{ const el=document.querySelector(sel); if(el){ el.addEventListener("input",wAutoClass); el.addEventListener("change",wAutoClass); } });
 
 /* ---------- shoeing days & vitals ---------- */
 function calcShoe(){ const d=$("#shoeDate").value; if(!d){ $("#shoeDays").value=""; return; } const t=new Date(); t.setHours(0,0,0,0); const n=Math.round((t-new Date(d+"T00:00:00"))/864e5); $("#shoeDays").value = n<0 ? "" : n; }
