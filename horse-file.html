@@ -209,13 +209,13 @@
   </section>
 
   <section class="g"><h2>B. Measurements & Body Weight / القياسات ووزن الجسم</h2>
-    <div class="calc">
+    <div class="calc nofield">
       <div class="grid">
-        <div class="f"><label>Body Length (inch) / <span class="ar">طول الجسم</span></label><input type="number" step="0.1" data-k="lengthIn" id="lenIn"></div>
-        <div class="f"><label>Heart Girth (inch) / <span class="ar">محيط الصدر</span></label><input type="number" step="0.1" data-k="girthIn" id="girIn"></div>
-        <div class="f"><label>Estimated (lbs) / <span class="ar">تقديري رطل</span></label><input class="out" id="estLb" readonly></div>
-        <div class="f"><label>Estimated (kg) / <span class="ar">تقديري كغ</span></label><input class="out" id="estKg" readonly></div>
-        <div class="f"><label>Horse type (formula) / <span class="ar">نوع الحصان (المعادلة)</span></label><select data-k="wClass" id="wcls" title="Set by age and breed – can be changed / حسب العمر والسلالة – يمكن تغييره"><option value=""></option><option value="adult">Adult light horse (÷ 330) / حصان خفيف بالغ</option><option value="pony">Pony (÷ 299) / بوني</option><option value="yearling">Yearling (÷ 301) / حولي</option><option value="weanling">Weanling (÷ 280–290, 285) / مفطوم</option><option value="foal">Young foal – girth (m)³ × 90 / مهر صغير – (المحيط م)³ × 90</option></select></div>
+        <div class="f nofield"><label>Body Length (inch) / <span class="ar">طول الجسم</span></label><input type="number" step="0.1" data-k="lengthIn" id="lenIn"></div>
+        <div class="f nofield"><label>Heart Girth (inch) / <span class="ar">محيط الصدر</span></label><input type="number" step="0.1" data-k="girthIn" id="girIn"></div>
+        <div class="f nofield"><label>Estimated (lbs) / <span class="ar">تقديري رطل</span></label><input class="out" id="estLb" readonly></div>
+        <div class="f nofield"><label>Estimated (kg) / <span class="ar">تقديري كغ</span></label><input class="out" id="estKg" readonly></div>
+        <div class="f nofield"><label>Horse type (formula) / <span class="ar">نوع الحصان (المعادلة)</span></label><select data-k="wClass" id="wcls" title="Set by age and breed – can be changed / حسب العمر والسلالة – يمكن تغييره"><option value=""></option><option value="adult">Adult light horse (÷ 330) / حصان خفيف بالغ</option><option value="pony">Pony (÷ 299) / بوني</option><option value="yearling">Yearling (÷ 301) / حولي</option><option value="weanling">Weanling (÷ 280–290, 285) / مفطوم</option><option value="foal">Young foal – girth (m)³ × 90 / مهر صغير – (المحيط م)³ × 90</option></select></div>
       </div>
       <div class="formula" style="display:none">
         (<span id="fxL">L</span> × <span id="fxG">G</span> × <span id="fxG2">G</span>) inch ÷
@@ -226,12 +226,12 @@
       </div>
     </div>
     <div class="grid" style="margin-top:8px">
-      <div class="f"><label>Manual Weight (kg) – if no tape / <span class="ar">وزن يدوي</span></label><input type="number" data-k="manualKg" id="manKg"></div>
-      <div class="f"><label>Weight used for Rx (kg) / <span class="ar">الوزن المعتمد للوصفة</span></label><input class="out" data-k="weightKg" id="useKg" readonly></div>
-      <div class="f"><label>Last Weight Date / <span class="ar">تاريخ آخر وزن</span></label><input type="date" data-k="weightDate" id="wDate"></div>
+      <div class="f"><label>Body Weight (kg) / <span class="ar">وزن الجسم (كغ)</span></label><input type="number" data-k="manualKg" id="manKg"></div>
+      <div class="f nofield"><label>Weight used for Rx (kg) / <span class="ar">الوزن المعتمد للوصفة</span></label><input class="out" data-k="weightKg" id="useKg" readonly></div>
+      <div class="f nofield"><label>Last Weight Date / <span class="ar">تاريخ آخر وزن</span></label><input type="date" data-k="weightDate" id="wDate"></div>
       <div class="f"><label>BCS (1-9) / <span class="ar">حالة الجسم</span></label><select data-k="bcs"><option></option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option></select></div>
       <div class="f"><label>Height (hand) / <span class="ar">الطول عند الحارك</span></label><input type="number" step="0.1" data-k="heightHands"></div>
-      <div class="f span3 src" id="wSrc"></div>
+      <div class="f span3 src nofield" id="wSrc"></div>
     </div>
   </section>
 
@@ -366,6 +366,7 @@ function calcWeight(){
   else if(L&&G&&D){ lb=L*G*G/D; $("#estLb").value=lb.toFixed(0); $("#fxLb").textContent=lb.toFixed(0);
     if(K){ kg=lb/K; $("#estKg").value=kg.toFixed(0); $("#fxKg").textContent=kg.toFixed(0);} }
   else { $("#estLb").value=$("#estKg").value=""; $("#fxLb").textContent="lbs"; $("#fxKg").textContent="kg"; }
+  if(num("#manKg")==null && kg!=null) $("#manKg").value=Math.round(kg);
   const man=num("#manKg");
   const use = man ?? (kg!=null?Math.round(kg):null);
   $("#useKg").value = use ?? "";
@@ -1329,6 +1330,7 @@ await checkSeed();
   body.pfit .toolbar,body.pfit .noprint,body.pfit #fhint,body.pfit .modal{display:none!important}
   body.pfit #form{max-width:none;margin:0;padding:0;box-shadow:none;font-size:10.5px}
   body.pfit .pe-hide{display:none!important}
+  .nofield{display:none!important}
   body.pfit .formula,body.pfit .calc>.hint{display:none!important}
   body.pfit .calc{border:0;background:none;padding:0;margin:0 10px}
   body.pfit .calc .grid{padding:0}
@@ -1363,8 +1365,9 @@ await checkSeed();
     ON = true;
     document.body.classList.add("pfit");
 
-    // 1) weight: kg only – no lbs box and no formula line
+    // 1) weight: kg only – no lbs box and no formula line; measurement / formula fields are not used
     hide(document.getElementById("estLb")?.closest(".f"));
+    form.querySelectorAll(".nofield").forEach(hide);
 
     // 2) blank fields are left out
     form.querySelectorAll(".f").forEach(f => {
