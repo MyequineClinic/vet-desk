@@ -820,8 +820,8 @@ const BWT_TOL = 20;
 const BWT_REMS = ["Over wt", "Under wt", "OK"];
 const BWT_HT_REF = [[12, 250], [13, 345], [14, 395], [15, 460], [16, 505]];
 const BWT_UMN = {Pony:[15.58, 23.52, 1333], SmallPony:[15.58, 23.52, 1333], Arabian:[15.58, 23.52, 1344], Stock:[15.58, 23.52, 1269], Warmblood:[27.55, 25.98, 2235], Draft:[27.55, 25.98, 2092], Thoroughbred:[23.75553796, 10.69073808, 1073.380132]};
-const BWT_REF_AR = "الوزن القياسي: معادلات الوزن المثالي من جامعة مينيسوتا (الارتفاع + طول الجسم حسب نوع السلالة)؛ بالارتفاع فقط ← جدول الوزن حسب الارتفاع من Agriculture Victoria (حالة جسم متوسطة)؛ الخيول النامية ← نسبة الارتفاع ونسبة الوزن البالغ حسب العمر (NRC 2007 / KER). الملاحظات حسب درجة الجسم: وزن زائد فقط إذا كانت أكثر من 5، ووزن ناقص فقط إذا كانت أقل من 4.";
-const BWT_REF_TXT = "Standard BWT: University of Minnesota Extension ideal-weight equations (height + body length, by breed type); height only → Agriculture Victoria weight-by-height table (moderate condition); growing horses → % mature height and % mature weight for age (NRC 2007 / KER). Remarks follow the body score: Over wt only when BCS is over 5, Under wt only when BCS is below 4.";
+const BWT_REF_AR = "الوزن القياسي: معادلات الوزن المثالي من جامعة مينيسوتا (الارتفاع + طول الجسم حسب نوع السلالة)؛ بالارتفاع فقط ← جدول الوزن حسب الارتفاع من Agriculture Victoria (حالة جسم متوسطة)؛ الارتفاع المستخدم هو الفئة التالية (¼ شبر = 1 إنش) فوق الارتفاع المقاس؛ الخيول النامية ← نسبة الارتفاع ونسبة الوزن البالغ حسب العمر (NRC 2007 / KER). الملاحظات حسب درجة الجسم: وزن زائد فقط إذا كانت أكثر من 5، ووزن ناقص فقط إذا كانت أقل من 4.";
+const BWT_REF_TXT = "Standard BWT: University of Minnesota Extension ideal-weight equations (height + body length, by breed type); height only → Agriculture Victoria weight-by-height table (moderate condition); the height used is the next category (¼ hand = 1 inch) above the measured height; growing horses → % mature height and % mature weight for age (NRC 2007 / KER). Remarks follow the body score: Over wt only when BCS is over 5, Under wt only when BCS is below 4.";
 function bwtBreedType(breed){
   const b = String(breed || "").toLowerCase();
   if (/shetland|falabella|miniature|mini horse|شتلاند|قزم/.test(b)) return "SmallPony";
@@ -838,6 +838,8 @@ function bwtLin(t, x){ let i = 0; while (i < t.length - 2 && x > t[i + 1][0]) i+
 function bwtStd(o){
   const C = FCFG(), ageM = fdAgeM(o.dob), type = bwtBreedType(o.breed), r = {ageM, type, std:null, mature:null, method:"", pct:null};
   let H = N(o.heightCm) ? N(o.heightCm) / 2.54 : null, Lg = N(o.lengthIn), hf = 1;
+  // weight calculation uses the next height category (next ¼ hand = 1 inch) above the measured height, e.g. 15.0 hh (152.4 cm) → 15.1 hh (154.9 cm)
+  if (H && !o.noRound) { r.hMeasIn = H; H = Math.floor(H + 1e-6) + 1; r.hUsedIn = H; r.hUsedCm = H * 2.54; }
   if (H && ageM !== null && ageM < 48 && !N(o.matureBw)) { const gh = ghtFor(o.breed), p = fdInterp(gh, "age_months", "pct_mature_height", Math.max(ageM, +gh[0].age_months)); if (p && p.y > 0 && p.y < 100) hf = p.y / 100; }
   if (N(o.matureBw)) { r.mature = N(o.matureBw); r.method = T2("mature body weight typed in Horses Data", "وزن البلوغ المُدخل في بيانات الخيل"); }
   else if (H && Lg) { const e = BWT_UMN[type]; r.mature = (e[0] * H / hf + e[1] * Lg / hf - e[2]) / 2.2046; r.method = T2("Univ. of Minnesota ideal weight – " + BWT_TYPE_NAME[type] + " (height + body length)", "الوزن المثالي (جامعة مينيسوتا) – " + BWT_TYPE_NAME[type] + " (الارتفاع + طول الجسم)"); }
@@ -846,6 +848,7 @@ function bwtStd(o){
     else if (type === "Thoroughbred") { r.mature = vic(hh) * GROWTH_REF.Thoroughbred.mature / vic(TB_ADULT_CM / 2.54 / 4); r.method = T2("Thoroughbred weight by height (Agriculture Victoria table set to Kentucky Thoroughbreds – KER)", "وزن الثوروبريد حسب الارتفاع (جدول Agriculture Victoria مضبوط على ثوروبريد كنتاكي – KER)"); }
     else { r.mature = vic(hh); r.method = T2("weight-by-height table (Agriculture Victoria)", "جدول الوزن حسب الارتفاع (Agriculture Victoria)"); } }
   if (!(r.mature > 0)) { r.mature = null; return r; }
+  if (r.hUsedIn && !N(o.matureBw)) { const hs = x => Math.floor(x / 4) + "." + Math.floor(x % 4 + 1e-6) + " hh"; r.method += T2(" – height used " + hs(r.hUsedIn) + " (" + r.hUsedCm.toFixed(1) + " cm), next category above measured " + (+(r.hMeasIn * 2.54).toFixed(1)) + " cm", " – الارتفاع المستخدم " + hs(r.hUsedIn) + " (" + r.hUsedCm.toFixed(1) + " سم)، الفئة التالية فوق المقاس " + (+(r.hMeasIn * 2.54).toFixed(1)) + " سم"); }
   if (hf < 1) r.method += T2(" – mature height estimated (" + Math.round(hf * 100) + "% grown)", " – الارتفاع عند البلوغ تقديري (نما " + Math.round(hf * 100) + "%)");
   if (ageM === null) { r.std = r.mature; r.method += T2(" – no birth date, adult assumed", " – لا يوجد تاريخ ميلاد، اعتبر بالغاً"); return r; }
   const gf = gbwFor(o.breed), g = fdInterp(gf.pts, "age_months", "pct_mature_BW", ageM); r.pct = g ? g.y : 100; r.std = r.mature * r.pct / 100; r.gref = gf.ref;
@@ -1351,13 +1354,25 @@ const FD_ADV_HI = {dm:1.05, cp:1.25, ca:2, p:2}; // above this share of the requ
 const FD_ADV_N = {dm:["DM","kg",2], me:["ME","MJ",1], cp:["CP","g",0], ca:["Ca","g",1], p:["P","g",1]};
 // what 1 kg AS FED of a feed gives
 function fdDens(f, k){ if (!f || !f.dm) return 0; const d = f.dm / 100; return k === "dm" ? d : k === "me" ? d * f.de * fdN(FST().ME_DE_FACTOR) : d * (f[k] || 0) * 10; }
+// ME stays the same: replace x kg of a feed in use with y kg of another feed of the same kind (hay ↔ hay, feed ↔ feed) so that only CP / Ca / P change
+function fdSwap(inUse, lib, k, need){
+  let best = null; const me = f => fdDens(f, "me");
+  inUse.filter(a => a.used > 0 && me(a.f) > 0).forEach(a => [...inUse, ...lib].filter(b => b.name !== a.name && b.hay === a.hay && me(b.f) > 0).forEach(b => {
+    const r = me(a.f) / me(b.f), c = r * fdDens(b.f, k) - fdDens(a.f, k); if (!(c * need > 0)) return;
+    const x = Math.min(Math.abs(need / c), a.used), got = x * c;
+    const score = Math.min(Math.abs(got) / Math.abs(need), 1) * 10 - x * 0.01; if (!best || score > best.score) best = {a, b, x, y:x * r, got, score}; }));
+  if (!best) return null;
+  const {a, b, x, y, got} = best, [nm, u, d] = FD_ADV_N[k], multi = a.key && b.key ? `${a.key}:${+(a.used - x).toFixed(2)};${b.key}:${+(b.used + y).toFixed(2)}` : "";
+  return {multi, s:`swap ${fdF(x, 2)} kg ${a.name} → ${fdF(y, 2)} kg ${b.name}`,
+    t:`<b>ME stays the same:</b> replace <b>${fdF(x, 2)} kg ${esc(a.name)}</b> with <b>${fdF(y, 2)} kg ${esc(b.name)}</b> per day – ${nm} ${got > 0 ? "+" : "−"}${fdF(Math.abs(got), d)} ${u}${Math.abs(got) < Math.abs(need) * 0.98 ? ` (covers ${fdF(Math.abs(got), d)} of ${fdF(Math.abs(need), d)} ${u} – do the next step too)` : ""}${b.used ? "" : b.hay ? " – add it with + Add hay" : " – add it as a concentrate"}`};
+}
 function fdAdvice(R){
   const out = []; if (!R.req) return out;
   const st = FST(), tol = fdN(st.ENERGY_TOLERANCE), mn = fdN(st.NUTRIENT_MIN_PCT), S = R.cmp.feeds, Q = R.cmp.req, hay = R.feeds[0];
   const inUse = [...(R.hayParts ? R.hayParts.map(p => ({name:p.name, f:p.row, used:p.af, hay:true, key:""})) : hay.f ? [{name:hay.name, f:hay.f, used:hay.used, hay:true, key:"hay"}] : []),
     ...R.feeds.slice(1).filter(x => x.f).map(x => ({name:x.name, f:x.f, used:x.used, hay:false, key:x.key}))];
   const lib = FCFG().feeds.filter(f => ["Hay","Pellet","Concentrate"].includes(f.category) && !inUse.some(u => u.name === f.feed)).map(f => feedRow(f.feed)).filter(Boolean).map(f => ({name:f.feed, f, used:0, hay:f.cat === "Hay"}));
-  const concUsed = S.conc, concMax = R.lim.concMaxAF;
+  const concUsed = S.conc, concMax = R.lim.concMaxAF, meOK = Q.me ? Math.abs(S.me / Q.me - 1) <= tol : false;
   const side = (f, kg, k) => ["me","cp"].filter(x => x !== k).map(x => `${x === "me" ? "ME" : "CP"} +${fdF(fdDens(f, x) * kg, x === "me" ? 1 : 0)} ${x === "me" ? "MJ" : "g"}`).join(", ");
   const concNote = (o, kg) => !o.hay && concUsed + kg > concMax + 1e-3 ? ` – concentrate would be ${fdF(concUsed + kg, 2)} kg/day, above the max ${fdF(concMax, 2)} kg: add a meal or choose the hay option` : "";
   ["dm","me","cp","ca","p"].forEach(k => {
@@ -1382,7 +1397,14 @@ function fdAdvice(R){
           tips.push({s:lo ? `replace part of ${top.name} with ${lo.name}` : `use a hay lower in ${nm}`, t:`Reducing ${esc(top.name)} would take hay below the minimum ${fdF(R.lim.hayMinAF, 2)} kg/day – ${lo ? `replace part of it with <b>${esc(lo.name)}</b> (lower in ${nm}) using + Add hay` : "use a hay lower in " + nm}.`}); }
         else tips.push({key:top.key, val:+(top.used - kg).toFixed(2), s:`−${fdF(kg, 2)} kg ${top.name}`, t:`Reduce <b>${esc(top.name)}</b> by <b>${fdF(kg, 2)} kg</b>/day (${fdF(top.used, 2)} → ${fdF(top.used - kg, 2)} kg as fed) – it gives the most ${nm}.`}); }
     }
-    out.push({k, low, head:`${nm} ${low ? "short" : "over"} by ${fdF(gap, d)} ${u} (${fdP(r, 0)} of requirement)`, tips, short:`${nm} ${low ? "low" : "high"}${tips[0] ? ": " + tips[0].s : ""}`});
+    // ME within range but CP / Ca / P off: change only that nutrient – swap feeds (ME unchanged), or a supplement
+    if (meOK && ["cp","ca","p"].includes(k)) {
+      // CP: the swap first; Ca / P short: the supplement row first (it changes nothing else), then the swap
+      const sw = fdSwap(inUse, lib, k, low ? gap : -gap); if (sw) { const sup = tips.length && /supplement row/.test(tips[0].t); tips.splice(low && k !== "cp" && sup ? 1 : 0, 0, sw); }
+      if (low && k === "cp") { const ly = R.supps.find(x => x.key === "sLys"); tips.push({t:`As a supplement: protein quality is raised with L-lysine${ly && ly.used > 0 ? ` (<b>${fdF(ly.used * 1000, 0)} g</b>/day in the supplement row)` : " when lysine is short"}; for more crude protein add a protein meal (e.g. soybean meal) to the feed library and use it as a concentrate.`}); }
+      if (!low && (k === "p" || k === "ca")) tips.push({t:`No supplement is needed for extra ${nm}; keep Ca : P at least 1 : 1${k === "p" ? " (limestone is added when Ca is short)" : ""}.`});
+    }
+    out.push({k, low, head:`${nm} ${low ? "short" : "over"} by ${fdF(gap, d)} ${u} (${fdP(r, 0)} of requirement)${meOK && k !== "me" && k !== "dm" ? " – ME is OK" : ""}`, tips, short:`${nm} ${low ? "low" : "high"}${tips[0] ? ": " + tips[0].s : ""}`});
   });
   if (["me","cp"].every(k => out.some(o => o.k === k)) && R.basis !== "ME/CP") out.push({k:"basis", head:"ME and CP both off", tips:[{t:"Choose <b>4. Calculation basis → ME/CP</b>: the ration is raised until both ME and CP are met."}], short:"try basis ME/CP"});
   if (R.caP !== null && R.caP < 1) out.push({k:"cap", head:`Ca : P is ${fdF(R.caP, 2)} : 1 (below 1:1)`, tips:[{t:"Reduce high-P feeds (wheat bran, grains) or add limestone or alfalfa hay."}], short:"Ca:P below 1:1"});
@@ -1391,7 +1413,7 @@ function fdAdvice(R){
 function fdAdvPanel(R){
   const A = fdAdvice(R);
   return `<div class="panel"><h3 style="margin-top:0">Balance suggestions – feeds and hay</h3>
-    ${!R.req ? '<p class="small muted">Choose the feeding status and body weight to get suggestions.</p>' : A.length ? A.map(a => `<div class="fdadv"><b${a.k === "basis" ? "" : ' class="fdred"'}>${esc(a.head)}</b><ul>${a.tips.map(t => `<li>${t.t}${t.key ? ` <button class="small" data-fdapply="${esc(t.key)}:${t.val}">Apply</button>` : ""}</li>`).join("") || "<li>No feed in the library can correct this – check the feed library.</li>"}</ul></div>`).join("")
+    ${!R.req ? '<p class="small muted">Choose the feeding status and body weight to get suggestions.</p>' : A.length ? A.map(a => `<div class="fdadv"><b${a.k === "basis" ? "" : ' class="fdred"'}>${esc(a.head)}</b><ul>${a.tips.map(t => `<li>${t.t}${t.multi ? ` <button class="small" data-fdapply="${esc(t.multi)}">Apply</button>` : t.key ? ` <button class="small" data-fdapply="${esc(t.key)}:${t.val}">Apply</button>` : ""}</li>`).join("") || "<li>No feed in the library can correct this – check the feed library.</li>"}</ul></div>`).join("")
       : '<p class="small" style="color:var(--ok)">DM, ME, CP, Ca and P from the feeds and hay are within the standard – no change needed.</p>'}
     ${R.req ? '<p class="small muted" style="margin:6px 0 0">Compared on feeds and hay only (before supplements). <b>Apply</b> puts the new amount in the Adjusted column and everything updates at once. Make one change at a time, then check again.</p>' : ""}</div>`;
 }
@@ -1938,7 +1960,7 @@ function fdTbChart(){
   const now = new Date(), dobOf = m => { const d = new Date(now); d.setDate(d.getDate() - Math.round(m * 30.4375)); return d.toISOString().slice(0, 10); };
   const gh = ghtFor("Thoroughbred"), pctH = m => m >= 48 ? 100 : fdInterp(gh, "age_months", "pct_mature_height", m).y;
   const hh = c => { const t = c / 10.16, w = Math.floor(t), i = Math.round((t - w) * 4); return i === 4 ? (w + 1) + ".0" : w + "." + i; };
-  const cell = (c, a0, a1) => { const v = []; for (let m = a0; m <= a1; m += (m < 60 ? 1 : 12)) { const mh = c / 2.54 / 4 / (pctH(m) / 100); if (mh < 14 || mh > 17.5) continue; const r = bwtStd({dob:dobOf(m), heightCm:c, breed:"Thoroughbred"}); if (r.std) v.push(Math.round(r.std)); }
+  const cell = (c, a0, a1) => { const v = []; for (let m = a0; m <= a1; m += (m < 60 ? 1 : 12)) { const mh = c / 2.54 / 4 / (pctH(m) / 100); if (mh < 14 || mh > 17.5) continue; const r = bwtStd({noRound:1, dob:dobOf(m), heightCm:c, breed:"Thoroughbred"}); if (r.std) v.push(Math.round(r.std)); }
     if (!v.length) return '<td class="num muted">·</td>'; const lo = Math.min(...v), hi = Math.max(...v); return `<td class="num">${hi - lo <= 4 ? Math.round((lo + hi) / 2) : lo + "–" + hi}</td>`; };
   const rows = G.map(([en, ar, a0, a1]) => `<tr><td><b>${esc(T2(en, ar))}</b><br><small>${esc(a1 < 60 ? T2("growing – follows the curve", "نامٍ – يتبع المنحنى") : a0 >= 60 ? T2("adult – no growth", "بالغ – لا نمو") : T2("last growth, then adult", "آخر النمو ثم بالغ"))}</small></td>${hs.map(c => cell(c, a0, a1)).join("")}</tr>`).join("");
   return `<details style="margin-top:6px"><summary class="small"><b>${esc(T2("Thoroughbred standard weight chart – height × age group (kg)", "جدول الوزن القياسي للثوروبريد – الارتفاع × فئة العمر (كجم)"))}</b></summary>
@@ -1958,7 +1980,7 @@ function fdBreedChart(key){
   const now = new Date(), dobOf = m => { const d = new Date(now); d.setDate(d.getDate() - Math.round(m * 30.4375)); return d.toISOString().slice(0, 10); };
   const gh = ghtFor(C.breed), pctH = m => m >= 48 ? 100 : fdInterp(gh, "age_months", "pct_mature_height", Math.max(m, +gh[0].age_months)).y;
   const hh = c => { const t = c / 10.16, w = Math.floor(t), i = Math.round((t - w) * 4); return i === 4 ? (w + 1) + ".0" : w + "." + i; };
-  const cell = (c, a0, a1) => { const v = []; for (let m = a0; m <= a1; m += (m < 60 ? 1 : 12)) { const mh = c / 2.54 / 4 / (pctH(m) / 100); if (mh < C.lo || mh > C.hi) continue; const r = bwtStd({dob:dobOf(m), heightCm:c, breed:C.breed}); if (r.std) v.push(Math.round(r.std)); }
+  const cell = (c, a0, a1) => { const v = []; for (let m = a0; m <= a1; m += (m < 60 ? 1 : 12)) { const mh = c / 2.54 / 4 / (pctH(m) / 100); if (mh < C.lo || mh > C.hi) continue; const r = bwtStd({noRound:1, dob:dobOf(m), heightCm:c, breed:C.breed}); if (r.std) v.push(Math.round(r.std)); }
     if (!v.length) return '<td class="num muted">·</td>'; const lo = Math.min(...v), hi = Math.max(...v); return `<td class="num">${hi - lo <= 4 ? Math.round((lo + hi) / 2) : lo + "–" + hi}</td>`; };
   const rows = G.map(([en, ar, a0, a1]) => `<tr><td><b>${esc(T2(en, ar))}</b><br><small>${esc(a1 < 60 ? T2("growing – follows the curve", "نامٍ – يتبع المنحنى") : a0 >= 60 ? T2("adult – no growth", "بالغ – لا نمو") : T2("last growth, then adult", "آخر النمو ثم بالغ"))}</small></td>${hs.map(c => cell(c, a0, a1)).join("")}</tr>`).join("");
   return `<details style="margin-top:6px"><summary class="small"><b>${esc(T2(C.en + " standard weight chart – height × age group (kg)", "جدول الوزن القياسي – " + C.ar + " – الارتفاع × فئة العمر (كجم)"))}</b></summary>
@@ -1990,8 +2012,8 @@ function fdExplainHTML(print){
     <ol class="small" style="margin:8px 0 0;padding-left:20px;line-height:1.5">
       ${li("Body weight (tape formula)", "(body length × heart girth × heart girth) in inches ÷ divisor = lbs; lbs ÷ 2.2 = kg. Divisor by horse type: adult light horse 330, pony 299, yearling 301, weanling 280–290 (285 used). Young foal: heart girth in metres³ × 90 = kg. These are estimates; a weighbridge is the most accurate.",
         "وزن الجسم (معادلة الشريط)", "(طول الجسم × محيط الصدر × محيط الصدر) بالإنش ÷ القاسم = رطل؛ الرطل ÷ 2.2 = كجم. القاسم حسب نوع الحصان: حصان خفيف بالغ 330، بوني 299، حولي 301، مفطوم 280–290 (المستخدم 285). المهر الصغير: (محيط الصدر بالمتر)³ × 90 = كجم. هذه تقديرات؛ الميزان هو الأدق.")}
-      ${li("Standard BWT (breed · age · height)", `Adult standard: typed value, or University of Minnesota ideal-weight equation for the breed type (needs height and body length), or, with height only, the Agriculture Victoria weight-by-height table (moderate condition). Growing horse: mature height = height ÷ % of mature height for age; standard = mature weight × % of mature weight for age (growth tables in Feeds, status & standards). Remarks follow the body score: Over wt only when BCS is over 5, Under wt only when BCS is below 4, otherwise no remark; without a body score, more than ±${BWT_TOL} kg from the standard. With no height, ${mx} kg is used as the adult weight.`,
-        "الوزن القياسي (السلالة · العمر · الارتفاع)", `القياسي للبالغ: القيمة المكتوبة، أو معادلة الوزن المثالي من جامعة مينيسوتا لنوع السلالة (تحتاج الارتفاع وطول الجسم)، أو بالارتفاع فقط جدول Agriculture Victoria للوزن حسب الارتفاع (حالة جسم متوسطة). الحصان النامي: الارتفاع عند البلوغ = الارتفاع ÷ نسبة الارتفاع للعمر؛ القياسي = وزن البلوغ × نسبة الوزن للعمر (جداول النمو في الأعلاف والحالات والمعايير). الملاحظات حسب درجة الجسم: وزن زائد فقط إذا كانت أكثر من 5، ووزن ناقص فقط إذا كانت أقل من 4، وإلا فلا ملاحظة؛ وبدون درجة جسم: أكثر من ±${BWT_TOL} كجم عن القياسي. بدون ارتفاع يستخدم ${mx} كجم كوزن للبالغ.`)}
+      ${li("Standard BWT (breed · age · height)", `Adult standard: typed value, or University of Minnesota ideal-weight equation for the breed type (needs height and body length), or, with height only, the Agriculture Victoria weight-by-height table (moderate condition). The height used for weight is the next category (¼ hand = 1 inch) above the measured height, e.g. 15.0 hh (152.4 cm) → 15.1 hh (154.9 cm). Growing horse: mature height = height ÷ % of mature height for age; standard = mature weight × % of mature weight for age (growth tables in Feeds, status & standards). Remarks follow the body score: Over wt only when BCS is over 5, Under wt only when BCS is below 4, otherwise no remark; without a body score, more than ±${BWT_TOL} kg from the standard. With no height, ${mx} kg is used as the adult weight.`,
+        "الوزن القياسي (السلالة · العمر · الارتفاع)", `القياسي للبالغ: القيمة المكتوبة، أو معادلة الوزن المثالي من جامعة مينيسوتا لنوع السلالة (تحتاج الارتفاع وطول الجسم)، أو بالارتفاع فقط جدول Agriculture Victoria للوزن حسب الارتفاع (حالة جسم متوسطة). الارتفاع المستخدم للوزن هو الفئة التالية (¼ شبر = 1 إنش) فوق المقاس، مثل 15.0 hh (152.4 سم) ← 15.1 hh (154.9 سم). الحصان النامي: الارتفاع عند البلوغ = الارتفاع ÷ نسبة الارتفاع للعمر؛ القياسي = وزن البلوغ × نسبة الوزن للعمر (جداول النمو في الأعلاف والحالات والمعايير). الملاحظات حسب درجة الجسم: وزن زائد فقط إذا كانت أكثر من 5، ووزن ناقص فقط إذا كانت أقل من 4، وإلا فلا ملاحظة؛ وبدون درجة جسم: أكثر من ±${BWT_TOL} كجم عن القياسي. بدون ارتفاع يستخدم ${mx} كجم كوزن للبالغ.`)}
       ${li("Growth reference (young horses)", "Thoroughbred: body weight by age from Kentucky Equine Research (Kentucky Thoroughbreds, 0–18 months); the curve is used as % of a reference mature weight (18-month weight ÷ 0.80). Pony: MSD Veterinary Manual / NRC 2007 table for ponies of 200 kg adult weight (4–24 months). The curve is scaled to this horse's own mature weight, so a bigger or smaller horse of the breed gets its own standard. Daily gain = the change between table points; monthly gain = daily × 30.4. Other breeds and ages: the growth table in Feeds, status & standards.",
         "مرجع النمو (الخيول الصغيرة)", "الثوروبريد: وزن الجسم حسب العمر من Kentucky Equine Research (خيول كنتاكي، 0–18 شهراً)؛ يستخدم المنحنى كنسبة من وزن بلوغ مرجعي (وزن 18 شهراً ÷ 0.80). البوني: جدول دليل MSD البيطري / NRC 2007 للبوني بوزن بلوغ 200 كجم (4–24 شهراً). يُضبط المنحنى على وزن البلوغ لهذا الحصان، فيأخذ الحصان الأكبر أو الأصغر من السلالة معياره الخاص. الزيادة اليومية = الفرق بين نقاط الجدول؛ الزيادة الشهرية = اليومية × 30.4. السلالات والأعمار الأخرى: جدول النمو في الأعلاف والحالات والمعايير.")}
       ${li("Total feed per day", `Body weight × % of BW (dry matter) by body condition score or feeding status (Feeds, status & standards). Normal rules stay, except: BCS 1–2 → 2.5%, BCS 3 → 1.75% (the body score is trusted over the scale; Aged / Show jumping / Race keep their own % when it is higher); pregnant mares at least 2% (1.5% when BCS is over 7); lactating mares at least 2.5% with calcium supplemented when short; breeding stallions at least 2%. Allowed range ${lo}–${hi} of BW (MSD). Split by the ratio hay : concentrate. Kg as fed = kg DM ÷ DM %.`,
@@ -2069,7 +2091,7 @@ function fdDrawRes(R){
     box.querySelectorAll("[data-xcadd]").forEach(b => b.onclick = () => setXc(a => a.push({name:"", g:"", ca:"", p:""})));
     box.querySelectorAll("[data-xcd]").forEach(b => b.onclick = () => setXc(a => a.splice(+b.dataset.xcd, 1)));
     [["xcn","name"],["xcg","g"],["xcc","ca"],["xcp","p"]].forEach(([d, k]) => box.querySelectorAll(`[data-${d}]`).forEach(el => el.onchange = () => setXc(a => { a[+el.dataset[d]][k] = k === "name" ? el.value.trim() : (N(el.value) ?? ""); }))); }
-  box.querySelectorAll("[data-fdapply]").forEach(b => b.onclick = () => { const [k, v] = b.dataset.fdapply.split(":"); FD.plan.adj[k] = +v; render(true); });
+  box.querySelectorAll("[data-fdapply]").forEach(b => b.onclick = () => { b.dataset.fdapply.split(";").forEach(pr => { const [k, v] = pr.split(":"); if (k) FD.plan.adj[k] = +v; }); render(true); });
   $("#fd_notes").onchange = e => { FD.plan.notes = e.target.value; };
   { const hO = () => (S.horses || []).find(x => x._id === FD.hid), cur = () => fdOgDraft(hO(), fdOngoing(hO())).map(x => Object.assign({}, x));
     const setOg = fn => { const a = cur(); fn(a); FD.og = a; render(true); };
@@ -2268,6 +2290,35 @@ function fdCalcAllView(body, scope){
 const fdAmt2 = x => x.grams || x.cat === "Supplement" ? fdF(x.used * 1000, x.used * 1000 < 10 ? 1 : 0) + " g" : fdF(x.used, 2) + " kg";
 const fdPlanTxt = (P, R) => `Basis ${R.basis} · Ratio ${P.ratio} · Hay: ${R.feeds[0].name || P.hay || "–"} · Concentrate: ${R.concList.map(c => c.name + " " + fdP(c.w, 0)).join(" + ") || "–"}${N(P.override) !== null ? " · Override " + P.override + "%" : ""}`;
 let FD_SUMMODE = "cmp";
+// all horses: suggestions that apply to every horse (each horse's own suggestions are in its single-horse print)
+function fdCommonTips(D){
+  const rows = D.groups.flatMap(g => g.rows.filter(r => !r.stop)), st = FST(), T = [];
+  T.push(T2("Change feed slowly: increase concentrate / pellet by not more than 0.25 kg per day; reduce it over 7 days (14 days if more than 2 kg); change hay by more than 2 kg only a quarter of the change every 2 days.", "غيّر العلف تدريجياً: زد المركز / البليت بما لا يزيد عن 0.25 كجم يومياً؛ وأنقصه خلال 7 أيام (14 يوماً إذا كان أكثر من 2 كجم)؛ وغيّر الدريس أكثر من 2 كجم بربع الفرق كل يومين فقط."));
+  T.push(T2("New feed or new hay: mix with the old one – about a quarter more every 2 days (feed about 7 days, hay about 14 days).", "علف جديد أو دريس جديد: اخلطه مع القديم – نحو الربع كل يومين (العلف نحو 7 أيام، والدريس نحو 14 يوماً)."));
+  T.push(T2(`Split the concentrate into ${fdN(st.MEALS_PER_DAY) || 3} meals – not more than ${fdP(fdN(st.MAX_CONC_PER_MEAL_PCT))} of body weight per meal.`, `قسّم المركز على ${fdN(st.MEALS_PER_DAY) || 3} وجبات – بما لا يزيد عن ${fdP(fdN(st.MAX_CONC_PER_MEAL_PCT))} من وزن الجسم في الوجبة.`));
+  T.push(T2("Give the supplements written for each horse every day, mixed into the feed.", "قدّم المكملات المكتوبة لكل حصان يومياً ممزوجة بالعلف."));
+  if (rows.some(r => /^Lactating/.test(r.inp.status || ""))) T.push(T2("Lactating mares need more feed and extra calcium (limestone as written for each mare).", "الأفراس المرضعة تحتاج علفاً أكثر وكالسيوم إضافياً (حجر جيري كما هو مكتوب لكل فرس)."));
+  if (rows.some(r => /^Pregnant/.test(r.inp.status || ""))) T.push(T2("Pregnant mares: do not cut the ration below the written amount, even if they look well covered.", "الأفراس الحوامل: لا تنقص العليقة عن الكمية المكتوبة حتى لو بدت ممتلئة."));
+  T.push(T2("Fresh water and salt always available.", "الماء النظيف والملح متوفران دائماً."));
+  T.push(T2("Check body weight and body condition score every month and recalculate the ration when they change.", "افحص وزن الجسم ودرجة حالة الجسم كل شهر وأعد حساب العليقة عند تغيرهما."));
+  T.push(T2("If droppings get loose or a horse stops eating, go back one step and tell the vet.", "إذا أصبح الروث ليّناً أو توقف حصان عن الأكل، ارجع خطوة واحدة وأخبر الطبيب البيطري."));
+  return T;
+}
+// all horses: total amount of every item – per day, per week (× 7) and per month (× 30)
+function fdTotalsHTML(D){
+  const rows = D.groups.flatMap(g => g.rows.filter(r => !r.stop)), all = D.groups.reduce((t, g) => t + g.rows.length, 0) + D.nost.length, M = new Map();
+  rows.forEach(({R}) => [...fdSplitHay([R.feeds[0]], R), ...R.feeds.slice(1), ...R.supps].forEach(x => { if (!x.name || !(x.used > 0)) return;
+    const sup = x.grams || x.cat === "Supplement", k = x.name + "|" + (sup ? "s" : x.cat === "Hay" || /^hay/.test(x.key) ? "h" : "f");
+    if (!M.has(k)) M.set(k, {name:x.name, type:sup ? "s" : k.endsWith("h") ? "h" : "f", kg:0, n:0}); const o = M.get(k); o.kg += x.used; o.n++; }));
+  const TY = {h:["Hay", "دريس"], f:["Feed", "علف"], s:["Supplement", "مكمل"]}, items = [...M.values()].sort((a, b) => "hfs".indexOf(a.type) - "hfs".indexOf(b.type) || b.kg - a.kg);
+  const amt = (kg, sup) => sup && kg < 1 ? fdF(kg * 1000, 0) + T2(" g", " غ") : fdF(kg, kg < 10 ? 2 : 1) + T2(" kg", " كجم");
+  const tot = t => items.filter(x => x.type === t).reduce((a, x) => a + x.kg, 0);
+  return `<h2 style="margin:0 0 6px" data-notr>${esc(T2("Summary – ration calculated for " + rows.length + " horse(s)", "الملخص – عليقة محسوبة لعدد " + rows.length + " حصان"))}</h2>
+    <p data-notr>${esc(T2(`${rows.length} of ${all} horse(s) calculated` + (all > rows.length ? ` – ${all - rows.length} not calculated (data missing)` : "") + ". Month = 30 days.", `محسوب ${rows.length} من ${all} حصان` + (all > rows.length ? ` – ${all - rows.length} غير محسوب (بيانات ناقصة)` : "") + ". الشهر = 30 يوماً."))}</p>
+    <table data-notr><thead><tr><th>${esc(T2("Item", "البند"))}</th><th>${esc(T2("Type", "النوع"))}</th><th style="text-align:right">${esc(T2("Horses", "الخيل"))}</th><th style="text-align:right">${esc(T2("Per day", "يومياً"))}</th><th style="text-align:right">${esc(T2("Per week", "أسبوعياً"))}</th><th style="text-align:right">${esc(T2("Per month", "شهرياً"))}</th></tr></thead><tbody>
+      ${items.map(x => `<tr><td>${esc(x.name)}</td><td>${esc(T2(...TY[x.type]))}</td><td style="text-align:right">${x.n}</td><td style="text-align:right">${amt(x.kg, x.type === "s")}</td><td style="text-align:right">${amt(x.kg * 7, x.type === "s")}</td><td style="text-align:right">${amt(x.kg * 30, x.type === "s")}</td></tr>`).join("")}
+      ${["h", "f"].filter(t => items.some(x => x.type === t)).map(t => `<tr style="font-weight:bold"><td>${esc(T2("Total " + TY[t][0].toLowerCase(), "إجمالي " + TY[t][1]))}</td><td></td><td></td><td style="text-align:right">${amt(tot(t))}</td><td style="text-align:right">${amt(tot(t) * 7)}</td><td style="text-align:right">${amt(tot(t) * 30)}</td></tr>`).join("")}</tbody></table>`;
+}
 // one line: Required / Recommended ration per day
 const fdRecTxt = R => [fdSplitHay([R.feeds[0]], R).map(x => x.name + " " + fdAmt2(x)).join(" + "), ...R.feeds.slice(1).filter(x => x.used > 0).map(x => x.name + " " + fdAmt2(x)), ...R.supps.filter(x => x.used * 1000 >= 0.05).map(x => x.name + " " + fdAmt2(x))].filter(Boolean).join("; ") + " – " + T2("total", "الإجمالي") + " " + fdF(R.cmp.all.total, 2) + " kg";
 const FD_SUMK = [["de","DE MJ",1],["me","ME MJ",1],["cp","CP g",0],["ca","Ca g",1],["p","P g",1]];
@@ -2294,9 +2345,9 @@ function fdAllPrint(D){
   const inner = `<h1>Feeding summary – all horses${mode === "cmp" ? " – ongoing / required / short-surplus" : " – required / recommended"}</h1><p>${esc(dshow(today()))}</p>${groups}
     ${D.nost.length ? `<h2 style="margin:18px 0 4px">Feeding status not saved</h2><p style="color:#b00">${D.nost.map(x => esc(fdHName(x.h)) + " (" + esc(x.nd.join(", ")) + ": " + esc(FD_NOD) + ")").join(" · ")}</p>` : ""}
     <div style="break-before:page"></div>
-    <h2 style="margin:0 0 6px" data-notr>${esc(T2("Adjustment suggestions", "اقتراحات التعديل"))}</h2>
-    ${D.groups.flatMap(g => g.rows.filter(r => !r.stop).map(r => `<div style="break-inside:avoid;margin:0 0 8px"><p style="margin:0"><b>${esc((r.h.listNo ? r.h.listNo + ". " : "") + fdHName(r.h))}</b>${r.h.pid || r.h.listNo ? " · ID " + esc(r.h.pid || r.h.listNo) : ""} – ${esc(g.st)}</p><ul style="margin:2px 0 0" data-notr>${fdOwnerTips(r.R, fdOngoing(r.h)).map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`)).join("")}
+    <h2 style="margin:0 0 6px" data-notr>${esc(T2("Adjustment suggestions (for all horses)", "اقتراحات التعديل (لكل الخيل)"))}</h2><ul data-notr>${fdCommonTips(D).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
     <div style="margin-top:14px">${fdExplainHTML(true)}</div>
+    <div style="break-before:page"></div>${fdTotalsHTML(D)}
     <p style="margin-top:24px">Veterinarian Doctor: ____________________</p>`;
   openPrint(docPage("Feeding summary all horses", inner).replace("</head>", "<style>@page{size:A4 landscape;margin:10mm}body{margin:0}</style></head>"));
 }
@@ -4598,14 +4649,14 @@ function showHorseCard(id){
   const h = (S.horses || []).find(x => x._id === id); if (!h) return;
   const im = horseImg(id), mi = horseMarkImg(id), a = horseAge(h), mk = horseMarking(h), cap = horseCapName(h), HB = horseBwt(h);
   const vs = S.visits.filter(v => ofHorse({pid:h.pid || "", name:h.name || h.nameEn || ""}, v)).sort((x, y) => (y.date || "").localeCompare(x.date || "")), last = vs[0];
-  const info = [["No.", h.listNo], ["Patient ID", h.pid], ["Name", h.name], ["English", h.nameEn], ["Type / Sex", h.sex], ["Breed", h.breed],
+  const info = [["No.", h.listNo], ["Patient ID", h.pid], ["Name", h.name], ["English", h.nameEn], ["Type / Sex", h.sex], ["Breed", h.breed || " "],
     ["Born", h.birth ? dshow(h.birth) : h.birthYear], ["Age", a === null ? "" : a + " yrs"], ["Body weight", h.weightKg ? h.weightKg + " kg" : ""], ["Standard BWT", HB.std ? Math.round(HB.std) + " kg" : ""], ["Remarks on BWT", h.weightKg || h.bwtRemark ? (h.bwtRemark || HB.auto || "—") : ""], ["Category", h.category],
-    ["Height", heightShow(h.heightCm)], ["Body condition score", h.bcs ? h.bcs + (bcsRow(h.bcs) ? " – " + bcsRow(h.bcs).class : "") : ""], ["Feeding status", h.feedStatus], ["Job Status", h.workStatus], ["Syce Name", h.syce], ["Teeth", h.teeth], ["Hoof condition", h.hoofShoeing], ["Limb", h.limb], ["Shoeing type", h.shoeType], ["Date of shoeing", h.shoeDate ? dshow(h.shoeDate) : ""], ["Trimming", h.trimming], ["Sire", h.sire], ["Dam", h.dam],
+    ["Height", heightShow(h.heightCm)], ["Body length (inch)", " "], ["Heart girth (inch)", " "], ["Body condition score", h.bcs ? h.bcs + (bcsRow(h.bcs) ? " – " + bcsRow(h.bcs).class : "") : ""], ["Feeding status", h.feedStatus], ["Job Status", h.workStatus], ["Syce Name", h.syce], ["Teeth", h.teeth], ["Hoof condition", h.hoofShoeing], ["Limb", h.limb], ["Shoeing type", h.shoeType], ["Date of shoeing", h.shoeDate ? dshow(h.shoeDate) : ""], ["Trimming", h.trimming], ["Sire", h.sire], ["Dam", h.dam],
     ["Source", h.source], ["Rider", h.rider], ["Microchip", h.microchip], ["Service", horseSvc(h)], ["Visits", vs.length || ""], ["Last visit", last ? dshow(last.date) + (last.td ? " – " + last.td : "") : ""]]
-    .filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== "");
+    .filter(([l, v]) => ["Breed", "Body length (inch)", "Heart girth (inch)"].includes(l) || v !== undefined && v !== null && String(v).trim() !== "");
   modal(`<h2><span class="ar">${esc([h.name, h.nameEn].filter(Boolean).join(" / ") || h.pid || "Horse")}</span></h2>
     <div class="hcard">
-      <div class="side"><h3>Short info</h3>${info.map(([l, v]) => l === "Remarks on BWT" ? `<div class="kvr"><span>${esc(l)}</span><b><select id="hcBwtRem" data-noother title="${esc(HB.std ? "Standard " + Math.round(HB.std) + " kg – " + HB.method : "Add height and birth date for the standard")}" style="width:auto;padding:1px 4px"><option value="">${esc("Auto" + (HB.auto ? " – " + HB.auto : ""))}</option>${BWT_REMS.map(x => `<option value="${esc(x)}"${h.bwtRemark === x ? " selected" : ""}>${esc(x)}</option>`).join("")}${h.bwtRemark && !BWT_REMS.includes(h.bwtRemark) ? `<option selected>${esc(h.bwtRemark)}</option>` : ""}</select></b></div>` : `<div class="kvr"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("") || '<p class="muted small">No details yet.</p>'}</div>
+      <div class="side"><h3>Short info</h3>${info.map(([l, v]) => l === "Breed" ? `<div class="kvr"><span>${esc(l)}</span><b><input id="hcBreed" list="dl_hcbreeds" value="${esc(h.breed || "")}" placeholder="e.g. Thoroughbred" style="width:9em;padding:1px 4px"><datalist id="dl_hcbreeds">${[...new Set([...(L().breeds || []), "Thoroughbred", "Arabian", "Warmblood", "Quarter Horse", "Pony", "Shetland pony", "Draft"])].map(x => `<option>${esc(x)}</option>`).join("")}</datalist></b></div>` : l === "Body length (inch)" || l === "Heart girth (inch)" ? `<div class="kvr"><span>${esc(l)}</span><b><input id="${l === "Body length (inch)" ? "hcLen" : "hcGirth"}" type="number" step="0.1" data-notr value="${esc(l === "Body length (inch)" ? (h.lengthIn ?? "") : (h.girthIn ?? ""))}" title="Filled from the ⚖ Weight formula (Horses Data › Edit) – can be typed here" style="width:6em;padding:1px 4px"></b></div>` : l === "Remarks on BWT" ? `<div class="kvr"><span>${esc(l)}</span><b><select id="hcBwtRem" data-noother title="${esc(HB.std ? "Standard " + Math.round(HB.std) + " kg – " + HB.method : "Add height and birth date for the standard")}" style="width:auto;padding:1px 4px"><option value="">${esc("Auto" + (HB.auto ? " – " + HB.auto : ""))}</option>${BWT_REMS.map(x => `<option value="${esc(x)}"${h.bwtRemark === x ? " selected" : ""}>${esc(x)}</option>`).join("")}${h.bwtRemark && !BWT_REMS.includes(h.bwtRemark) ? `<option selected>${esc(h.bwtRemark)}</option>` : ""}</select></b></div>` : `<div class="kvr"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("") || '<p class="muted small">No details yet.</p>'}</div>
       <figure>${im ? `<img src="${esc(im.data)}" alt="${esc(cap)}" data-act="zoom">` : '<div class="muted" style="padding:50px 0;border:1px dashed var(--line);border-radius:8px">🐴<br>No photo yet</div>'}
         <figcaption><b>${esc(cap)}</b><div class="muted small">${[h.color, h.headMark, h.legMark].filter(Boolean).map(mkShow).join(" · ")}</div></figcaption></figure>
       <div class="side"><h3>Ident marking</h3>${horseMarksHTML(h, "mkline") || '<p class="muted small">No colour or markings typed yet – add them with “Photo / caption”.</p>'}
@@ -4626,7 +4677,9 @@ function showHorseCard(id){
     if (act === "rx") { close(); return startRxFor(h.pid || "", h.name || h.nameEn || ""); }
   });
   { const bg = [...document.querySelectorAll(".modal-bg")].pop(), sel = bg && bg.querySelector("#hcBwtRem");
-    if (sel) sel.onchange = async () => { await saveHorseFields(h, {bwtRemark:sel.value}); toast("Remarks on BWT saved."); }; }
+    if (sel) sel.onchange = async () => { await saveHorseFields(h, {bwtRemark:sel.value}); toast("Remarks on BWT saved."); };
+    const hc = (q, k, msg, num) => { const el = bg && bg.querySelector(q); if (el) el.onchange = async () => { const v = el.value.trim(); if (String(h[k] ?? "") === v) return; await saveHorseFields(h, {[k]:num && v !== "" ? +v : v}); h[k] = num && v !== "" ? +v : v; toast(msg); document.querySelectorAll(".modal-bg").forEach(x => x.remove()); showHorseCard(id); }; };
+    hc("#hcBreed", "breed", "Breed saved – Standard BWT updated.", false); hc("#hcLen", "lengthIn", "Body length saved.", true); hc("#hcGirth", "girthIn", "Heart girth saved.", true); }
 }
 // delete one horse (a row) – its prescriptions, vaccinations and Examination Sheets stay
 function deleteHorse(id){
